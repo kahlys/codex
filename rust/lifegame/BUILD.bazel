@@ -1,9 +1,0 @@
-load("@crates//:defs.bzl", "aliases", "all_crate_deps")
-load("@rules_rust//rust:defs.bzl", "rust_binary")
-
-rust_binary(
-    name = "lifegame",
-    srcs = ["src/main.rs"],
-    crate_name = "lifegame",
-    deps = all_crate_deps(),
-)
