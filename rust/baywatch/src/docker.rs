@@ -4,10 +4,18 @@ use bollard::container::{
 };
 use chrono::DateTime;
 use futures_util::TryStreamExt;
+use std::fmt;
 
-#[derive(Debug)]
 pub enum Error {
     DockerError(String),
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Error::DockerError(msg) => write!(f, "{}", msg),
+        }
+    }
 }
 
 pub async fn run_container(
@@ -85,7 +93,7 @@ pub async fn run_container(
 fn cpu_shares(count: i64) -> String {
     match count {
         c if c < 1 => panic!("cpu count must be a positive number"),
-        c if c == 1 => "0".to_string(),
+        1 => "0".to_string(),
         _ => format!("0-{}", count - 1),
     }
 }
