@@ -1,4 +1,4 @@
-name: Test and Build Go and Rust Code
+name: Tests
 
 on:
   push:
