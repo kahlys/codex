@@ -88,12 +88,12 @@ func stringsLess(a, b string) bool {
 	iRunes := []rune(a)
 	jRunes := []rune(b)
 
-	min := len(iRunes)
-	if min > len(jRunes) {
-		min = len(jRunes)
+	minLen := len(iRunes)
+	if minLen > len(jRunes) {
+		minLen = len(jRunes)
 	}
 
-	for idx := 0; idx < min; idx++ {
+	for idx := 0; idx < minLen; idx++ {
 		ir := iRunes[idx]
 		jr := jRunes[idx]
 

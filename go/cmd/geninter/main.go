@@ -47,9 +47,11 @@ func run(pkgPath string, structName string) (string, error) {
 		return "", fmt.Errorf("multiple packages found")
 	}
 
-	methods := []string{}
-	for _, file := range firstPackage(pkgs).Files {
-		methods = append(methods, getMethods(structName, file)...)
+	var methods []string
+	for _, pkg := range pkgs {
+		for _, file := range pkg.Files {
+			methods = append(methods, getMethods(structName, file)...)
+		}
 	}
 
 	return generate(structName, methods)
@@ -134,13 +136,6 @@ func typeExprToString(expr ast.Expr) string {
 	var buf bytes.Buffer
 	printer.Fprint(&buf, token.NewFileSet(), expr)
 	return buf.String()
-}
-
-func firstPackage(pkgs map[string]*ast.Package) *ast.Package {
-	for _, pkg := range pkgs {
-		return pkg
-	}
-	return nil
 }
 
 func checkErr(err error, msg string) {
