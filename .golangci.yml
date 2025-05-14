@@ -1,22 +1,39 @@
-output:
-  sort-results: true
-
+version: "2"
 linters:
-  disable-all: true
+  default: none
   enable:
     - goconst
-    - gofumpt
-    - goimports
-    - gosimple
     - govet
     - ineffassign
     - misspell
+    - revive
     - staticcheck
     - unused
-    - revive
-
-linters-settings:
-  goimports:
-    local-prefixes: github.com/kahlys/codex
-  goconst:
-    min-occurrences: 5
+  settings:
+    goconst:
+      min-occurrences: 5
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
+    - gofumpt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/kahlys/codex
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

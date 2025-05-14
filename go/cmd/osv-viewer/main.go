@@ -56,13 +56,13 @@ type OSVScannerResult struct {
 					URL  string `json:"url"`
 				} `json:"references"`
 				DatabaseSpecific struct {
-					CweIds         []string `json:"cwe_ids"`
+					CweIDs         []string `json:"cwe_ids"`
 					GithubReviewed bool     `json:"github_reviewed"`
 					Severity       string   `json:"severity"`
 				} `json:"database_specific"`
 			} `json:"vulnerabilities"`
 			Groups []struct {
-				Ids []string `json:"ids"`
+				IDs []string `json:"ids"`
 			} `json:"groups"`
 		} `json:"packages"`
 	} `json:"results"`
@@ -80,7 +80,7 @@ func main() {
 		CompletionOptions: cobra.CompletionOptions{
 			DisableDefaultCmd: true,
 		},
-		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		PersistentPreRunE: func(*cobra.Command, []string) error {
 			content, err := os.ReadFile(fIn)
 			if err != nil {
 				return err
