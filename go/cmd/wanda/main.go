@@ -49,14 +49,14 @@ func main() {
 					p := Param{
 						Name: param.Value.Name,
 					}
-					switch param.Value.Schema.Value.Type {
-					case "string":
+					switch schemaType := param.Value.Schema.Value.Type; {
+					case schemaType.Is("string"):
 						p.Type = "string"
-					case "integer":
+					case schemaType.Is("integer"):
 						p.Type = "int"
-					case "number":
+					case schemaType.Is("number"):
 						p.Type = "float64"
-					case "boolean":
+					case schemaType.Is("boolean"):
 						p.Type = "bool"
 					default:
 						log.Fatal("ERROR: unknown type: ", param.Value.Schema.Value.Type)
@@ -241,16 +241,16 @@ func SchemaAsJSON(ident int, schema *openapi3.Schema) string {
 	if schema == nil {
 		return jsonNil
 	}
-	switch schema.Type {
-	case "object":
+	switch schemaType := schema.Type; {
+	case schemaType.Is("object"):
 		return SchemaAsJSONObject(ident, schema)
-	case "array":
+	case schemaType.Is("array"):
 		return SchemaAsJSONArray(ident, schema)
-	case "string":
+	case schemaType.Is("string"):
 		return SchemaAsJSONString(ident, schema)
-	case "integer", "number":
+	case schemaType.Is("integer"), schemaType.Is("number"):
 		return SchemaAsJSONInt(ident, schema)
-	case "boolean":
+	case schemaType.Is("boolean"):
 		return SchemaAsJSONBool(ident, schema)
 	default:
 		return ""
