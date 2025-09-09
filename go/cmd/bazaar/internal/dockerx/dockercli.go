@@ -227,7 +227,7 @@ func ContainerStopRemove(ctx context.Context, containerID string) error {
 	return nil
 }
 
-func ContainerInspect(ctx context.Context, containerID string) (types.ContainerJSON, error) {
+func ContainerInspect(ctx context.Context, containerID string) (container.InspectResponse, error) {
 	return cli.ContainerInspect(ctx, containerID)
 }
 
