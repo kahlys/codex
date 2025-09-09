@@ -34,7 +34,7 @@ fn grep_str(s: &str, path: &str) -> Result<(), Box<dyn Error>> {
         .lines()
         .enumerate()
         .filter_map(|(i, line)| match line {
-            Ok(l) if l.contains(&s) => Some((i + 1, l)),
+            Ok(l) if l.contains(s) => Some((i + 1, l)),
             _ => None,
         });
 
@@ -42,7 +42,7 @@ fn grep_str(s: &str, path: &str) -> Result<(), Box<dyn Error>> {
         println!(
             "{} : {}",
             t.0.to_string().blue(),
-            t.1.replacen(&s, &s.red().bold().to_string(), 1)
+            t.1.replacen(s, &s.red().bold().to_string(), 1)
         )
     }
 
