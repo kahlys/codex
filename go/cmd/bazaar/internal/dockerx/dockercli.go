@@ -10,6 +10,7 @@ import (
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
+	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
 )
@@ -84,7 +85,7 @@ func ContainerList(ctx context.Context) ([]Container, error) {
 
 	containers, err := cli.ContainerList(
 		ctx,
-		types.ContainerListOptions{
+		container.ListOptions{
 			All:     true,
 			Filters: filter,
 		},
@@ -128,7 +129,7 @@ func containerEnv(ctx context.Context, containerID string) (map[string]string, e
 
 // ImageExists checks if the given image:tag exists locally
 func ImageExists(ctx context.Context, imageRef string) (bool, error) {
-	images, err := cli.ImageList(ctx, types.ImageListOptions{})
+	images, err := cli.ImageList(ctx, image.ListOptions{})
 	if err != nil {
 		return false, err
 	}
@@ -151,7 +152,7 @@ func ContainerStartNew(ctx context.Context, config Config) error {
 		return fmt.Errorf("failed to check image existence: %w", err)
 	}
 	if !found {
-		out, err := cli.ImagePull(ctx, imageRef, types.ImagePullOptions{})
+		out, err := cli.ImagePull(ctx, imageRef, image.PullOptions{})
 		if err != nil {
 			return fmt.Errorf("failed to pull image %s: %w", imageRef, err)
 		}
@@ -203,7 +204,7 @@ func ContainerStartNew(ctx context.Context, config Config) error {
 }
 
 func ContainerStart(ctx context.Context, containerID string) error {
-	if err := cli.ContainerStart(ctx, containerID, types.ContainerStartOptions{}); err != nil {
+	if err := cli.ContainerStart(ctx, containerID, container.StartOptions{}); err != nil {
 		return fmt.Errorf("failed to start container: %w", err)
 	}
 	return nil
@@ -220,20 +221,20 @@ func ContainerStopRemove(ctx context.Context, containerID string) error {
 	if err := ContainerStop(ctx, containerID); err != nil {
 		return fmt.Errorf("failed to stop container: %w", err)
 	}
-	if err := cli.ContainerRemove(ctx, containerID, types.ContainerRemoveOptions{Force: true}); err != nil {
+	if err := cli.ContainerRemove(ctx, containerID, container.RemoveOptions{Force: true}); err != nil {
 		return fmt.Errorf("failed to remove container: %w", err)
 	}
 	return nil
 }
 
-func ContainerInspect(ctx context.Context, containerID string) (types.ContainerJSON, error) {
+func ContainerInspect(ctx context.Context, containerID string) (container.InspectResponse, error) {
 	return cli.ContainerInspect(ctx, containerID)
 }
 
 func ContainerNameAvailable(ctx context.Context, name string) error {
 	containers, err := cli.ContainerList(
 		ctx,
-		types.ContainerListOptions{All: true},
+		container.ListOptions{All: true},
 	)
 	if err != nil {
 		return fmt.Errorf("failed to list containers: %w", err)
