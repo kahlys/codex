@@ -1,0 +1,31 @@
+GET http://localhost:3000/
+
+###
+
+GET http://localhost:3000/monsters
+
+###
+
+POST http://localhost:3000/monsters
+Content-Type: application/json
+
+{
+    "name": "Vampire",
+    "age": 360,
+    "alive": true
+}
+
+### 
+
+PUT http://localhost:3000/monsters/3
+Content-Type: application/json
+
+{
+    "name": "Zombie",
+    "age": 75,
+    "alive": false
+}
+
+###
+
+DELETE http://localhost:3000/monsters/3
