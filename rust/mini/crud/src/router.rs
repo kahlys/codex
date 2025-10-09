@@ -1,5 +1,5 @@
 use crate::{
-    db, middlewares,
+    auth, db, middlewares,
     model::{self, Monster},
 };
 use axum::{
@@ -7,16 +7,27 @@ use axum::{
     extract::{Json, Path, State},
     http::StatusCode,
     middleware, response,
-    routing::{get, put},
+    routing::{get, post, put},
 };
 use serde_json::{Value, json};
 use tower::ServiceBuilder;
 
 pub fn new_app() -> Router {
-    Router::new()
-        .route("/", get(hello))
+    // Protected routes that require authentication
+    let protected_routes = Router::new()
         .route("/monsters", get(list_monsters).post(create_monster))
         .route("/monsters/{id}", put(update_monster).delete(delete_monster))
+        .layer(middleware::from_fn(auth::auth_middleware));
+
+    // Public routes
+    let public_routes = Router::new()
+        .route("/", get(hello))
+        .route("/login", post(auth::login));
+
+    // Combine routes
+    Router::new()
+        .merge(public_routes)
+        .merge(protected_routes)
         .with_state(db::new_db())
         .layer(ServiceBuilder::new().layer(middleware::from_fn(middlewares::print_request_info)))
 }

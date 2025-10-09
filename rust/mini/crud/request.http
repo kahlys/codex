@@ -2,12 +2,29 @@ GET http://localhost:3000/
 
 ###
 
+POST http://localhost:3000/login
+Content-Type: application/json
+
+{
+    "username": "admin"
+}
+
+###
+
+# Protected endpoint - requires Authorization header
+GET http://localhost:3000/monsters
+Authorization: Bearer YOUR_JWT_TOKEN_HERE
+
+###
+
+# This should fail with 401 Unauthorized
 GET http://localhost:3000/monsters
 
 ###
 
 POST http://localhost:3000/monsters
 Content-Type: application/json
+Authorization: Bearer YOUR_JWT_TOKEN_HERE
 
 {
     "name": "Vampire",
@@ -19,6 +36,7 @@ Content-Type: application/json
 
 PUT http://localhost:3000/monsters/3
 Content-Type: application/json
+Authorization: Bearer YOUR_JWT_TOKEN_HERE
 
 {
     "name": "Zombie",
@@ -29,3 +47,4 @@ Content-Type: application/json
 ###
 
 DELETE http://localhost:3000/monsters/3
+Authorization: Bearer YOUR_JWT_TOKEN_HERE
