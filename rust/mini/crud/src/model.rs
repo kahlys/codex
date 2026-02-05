@@ -9,3 +9,19 @@ pub struct Monster {
     pub age: u32,
     pub alive: bool,
 }
+
+#[derive(Deserialize)]
+pub struct LoginRequest {
+    pub username: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct Claims {
+    pub sub: String, // username
+    pub exp: usize,  // expiration time
+}
+
+#[derive(Serialize)]
+pub struct AuthResponse {
+    pub token: String,
+}
