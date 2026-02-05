@@ -4,6 +4,6 @@ resolver = "2"
 
 members = [
     "rust/baywatch",
-    "rust/lifegame", "rust/mini/crud",
+    "rust/lifegame", "rust/mini/crud", "rust/mini/ex",
     "rust/mini/grep", "rust/mini/tcphello",
 ]
