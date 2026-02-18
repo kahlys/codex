@@ -1,10 +1,11 @@
 package main
 
 import (
+	"strings"
 	"testing"
 )
 
-func TestParseOwnerRepo(t *testing.T) {
+func TestSplitOwnerRepo(t *testing.T) {
 	tests := []struct {
 		name    string
 		input   string
@@ -45,28 +46,7 @@ func TestParseOwnerRepo(t *testing.T) {
 }
 
 func splitOwnerRepo(input string) []string {
-	// This is a helper function extracted for testing purposes
-	// In the actual implementation, this logic is using strings.Split
-	if input == "" {
-		return []string{}
-	}
-	
-	parts := []string{}
-	slashCount := 0
-	start := 0
-	
-	for i := 0; i < len(input); i++ {
-		if input[i] == '/' {
-			slashCount++
-			parts = append(parts, input[start:i])
-			start = i + 1
-		}
-	}
-	
-	// Add the last part
-	if start < len(input) {
-		parts = append(parts, input[start:])
-	}
-	
-	return parts
+	// Helper function for testing the owner/repo parsing logic
+	// Uses strings.Split as implemented in main.go
+	return strings.Split(input, "/")
 }
