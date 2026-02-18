@@ -10,6 +10,7 @@ require (
 	github.com/docker/docker v28.4.0+incompatible
 	github.com/docker/go-connections v0.6.0
 	github.com/getkin/kin-openapi v0.133.0
+	github.com/google/go-github/v67 v67.0.0
 	github.com/jackc/pgx/v5 v5.7.6
 	github.com/jedib0t/go-pretty v4.3.0+incompatible
 	github.com/lib/pq v1.10.9
@@ -45,6 +46,7 @@ require (
 	github.com/go-openapi/jsonpointer v0.22.0 // indirect
 	github.com/go-openapi/strfmt v0.23.0 // indirect
 	github.com/go-openapi/swag/jsonname v0.24.0 // indirect
+	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
