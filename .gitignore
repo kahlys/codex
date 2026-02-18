@@ -8,4 +8,4 @@
 *.so
 *.dylib
 /bin/
-gh-issues
+/gh-issues
