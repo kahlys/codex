@@ -1,0 +1,173 @@
+:root {
+    color-scheme: dark;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    margin: 0;
+    height: 100%;
+}
+
+body {
+    background: #111;
+    color: #e5e5e5;
+    font-family: "Segoe UI", sans-serif;
+}
+
+.app-layout {
+    display: flex;
+    min-height: 100vh;
+}
+
+.sidebar {
+    width: 320px;
+    flex: 0 0 320px;
+    padding: 24px 20px;
+    background: #161616;
+    border-right: 1px solid #2a2a2a;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.sidebar h1 {
+    margin: 0 0 8px;
+    font-size: 1.35rem;
+    font-weight: 600;
+}
+
+.sidebar-divider {
+    width: 100%;
+    margin: 8px 0 4px;
+    border: none;
+    border-top: 1px solid #2f2f2f;
+}
+
+#controlsPanel {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.control-group {
+    padding: 0;
+    border: none;
+    background: transparent;
+}
+
+.control-label {
+    margin-bottom: 6px;
+    font-size: 0.92rem;
+    color: #e5e5e5;
+}
+
+.control-slider {
+    width: 100%;
+    appearance: none;
+    -webkit-appearance: none;
+    background: transparent;
+}
+
+.control-slider::-webkit-slider-runnable-track {
+    height: 4px;
+    background: #2c2c2c;
+    border: 1px solid #3a3a3a;
+}
+
+.control-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 12px;
+    height: 12px;
+    background: #111;
+    border: 1px solid #666;
+    margin-top: -5px;
+    cursor: pointer;
+}
+
+.control-slider::-moz-range-track {
+    height: 4px;
+    background: #2c2c2c;
+    border: 1px solid #3a3a3a;
+}
+
+.control-slider::-moz-range-thumb {
+    width: 12px;
+    height: 12px;
+    background: #111;
+    border: 1px solid #666;
+    border-radius: 0;
+    cursor: pointer;
+}
+
+.control-slider:focus-visible {
+    outline: 2px solid #f2f2f2;
+    outline-offset: 2px;
+}
+
+.import-button {
+    width: 100%;
+    border: 1px solid #3a3a3a;
+    padding: 10px 12px;
+    background: #222;
+    color: #f2f2f2;
+    font-size: 0.95rem;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.import-button:hover {
+    background: #2a2a2a;
+}
+
+.stage {
+    flex: 1;
+    min-width: 0;
+    padding: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #111;
+}
+
+#canvasContainer {
+    width: 100%;
+    height: calc(100vh - 48px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+canvas {
+    display: block;
+    max-width: 100%;
+    max-height: 100%;
+    border: 1px solid #333;
+    background: #000;
+}
+
+@media (max-width: 900px) {
+    .app-layout {
+        flex-direction: column;
+    }
+
+    .sidebar {
+        width: 100%;
+        flex-basis: auto;
+        border-right: none;
+        border-bottom: 1px solid #2a2a2a;
+    }
+
+    .stage {
+        min-height: 50vh;
+        padding-top: 16px;
+    }
+
+    #canvasContainer {
+        height: 60vh;
+    }
+}
