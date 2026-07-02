@@ -1,3 +1,4 @@
+// Package main is a sample app used by wanda-generated code tests.
 package main
 
 func main() {

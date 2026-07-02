@@ -1,3 +1,4 @@
+// Package main generates client/server scaffolding from an OpenAPI spec.
 package main
 
 import (

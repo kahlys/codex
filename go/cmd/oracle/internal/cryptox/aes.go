@@ -1,3 +1,4 @@
+// Package cryptox provides decryption helpers used by oracle.
 package cryptox
 
 import (
@@ -6,6 +7,7 @@ import (
 	"fmt"
 )
 
+// AesGCMDecrypt decrypts AES-GCM ciphertext prefixed with its nonce.
 func AesGCMDecrypt(in []byte, key []byte) ([]byte, error) {
 	if len(key) == 0 {
 		return []byte{}, fmt.Errorf("aes-gcm decryption failed: missing or empty encryption key")

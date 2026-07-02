@@ -1,3 +1,4 @@
+// Package debug contains debug utilities for the bazaar CLI.
 package debug
 
 import (

@@ -1,3 +1,4 @@
+// Package proxy implements a TCP proxy server.
 package proxy
 
 import (

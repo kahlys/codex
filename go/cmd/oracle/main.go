@@ -1,3 +1,4 @@
+// Package main extracts browser credentials and exports them as CSV.
 package main
 
 import (

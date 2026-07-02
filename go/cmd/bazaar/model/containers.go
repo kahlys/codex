@@ -1,3 +1,4 @@
+// Package model contains Bubble Tea models for the bazaar CLI.
 package model
 
 import (
@@ -86,8 +87,7 @@ func (m ContainersModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 
 	case tea.KeyMsg:
-		switch {
-		case key.Matches(msg, m.keys.Quit):
+		if key.Matches(msg, m.keys.Quit) {
 			return m, tea.Quit
 		}
 

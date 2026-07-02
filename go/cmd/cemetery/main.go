@@ -1,3 +1,4 @@
+// Package main runs the cemetery TUI application.
 package main
 
 import (
@@ -22,6 +23,7 @@ func main() {
 		app.NewHomeModel(),
 		tea.WithAltScreen(),
 	).Run(); err != nil {
-		log.Fatal(err)
+		log.Printf("program failed: %v", err)
+		return
 	}
 }

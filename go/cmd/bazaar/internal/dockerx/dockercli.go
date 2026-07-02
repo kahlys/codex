@@ -23,6 +23,7 @@ const (
 
 var cli *client.Client
 
+// Config describes how a managed container should be created.
 type Config struct {
 	Name  string
 	Image string
@@ -43,6 +44,7 @@ func init() {
 	}
 }
 
+// Container wraps Docker container metadata with inspect-derived details.
 type Container struct {
 	types.Container
 
@@ -55,30 +57,31 @@ type Container struct {
 
 func (c Container) String() string {
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("Container: %s\n", c.ID))
-	sb.WriteString(fmt.Sprintf("  Name: %s\n", strings.TrimPrefix(c.Names[0], "/")))
-	sb.WriteString(fmt.Sprintf("  Image: %s\n", c.Image))
-	sb.WriteString(fmt.Sprintf("  State: %s\n", c.State))
-	sb.WriteString(fmt.Sprintf("  Status: %s\n", c.Status))
-	sb.WriteString(fmt.Sprintf("  Ports: %v\n", c.Ports))
+	fmt.Fprintf(&sb, "Container: %s\n", c.ID)
+	fmt.Fprintf(&sb, "  Name: %s\n", strings.TrimPrefix(c.Names[0], "/"))
+	fmt.Fprintf(&sb, "  Image: %s\n", c.Image)
+	fmt.Fprintf(&sb, "  State: %s\n", c.State)
+	fmt.Fprintf(&sb, "  Status: %s\n", c.Status)
+	fmt.Fprintf(&sb, "  Ports: %v\n", c.Ports)
 	sb.WriteString("  Env:\n")
 	for k, v := range c.Env {
-		sb.WriteString(fmt.Sprintf("    %s=%s\n", k, v))
+		fmt.Fprintf(&sb, "    %s=%s\n", k, v)
 	}
 	sb.WriteString("  BindingPorts:\n")
 	for p, bindings := range c.BindingPorts {
-		sb.WriteString(fmt.Sprintf("    %v:\n", p))
+		fmt.Fprintf(&sb, "    %v:\n", p)
 		for _, b := range bindings {
-			sb.WriteString(fmt.Sprintf("      - %s:%s\n", b.HostIP, b.HostPort))
+			fmt.Fprintf(&sb, "      - %s:%s\n", b.HostIP, b.HostPort)
 		}
 	}
 	if c.ExitError != "" {
-		sb.WriteString(fmt.Sprintf("  ExitCode: %d\n", c.ExitCode))
-		sb.WriteString(fmt.Sprintf("  ExitError: %s\n", c.ExitError))
+		fmt.Fprintf(&sb, "  ExitCode: %d\n", c.ExitCode)
+		fmt.Fprintf(&sb, "  ExitError: %s\n", c.ExitError)
 	}
 	return sb.String()
 }
 
+// ContainerList returns all managed containers with enriched metadata.
 func ContainerList(ctx context.Context) ([]Container, error) {
 	filter := filters.NewArgs()
 	filter.Add("label", fmt.Sprintf("%s=%s", managedByLabelKey, managedByLabelValue))
@@ -96,7 +99,7 @@ func ContainerList(ctx context.Context) ([]Container, error) {
 
 	result := make([]Container, len(containers))
 	for i, c := range containers {
-		envvars, _ := containerEnv(ctx, c.ID)
+		envvars := containerEnv(ctx, c.ID)
 
 		inspect, _ := cli.ContainerInspect(ctx, c.ID)
 
@@ -111,7 +114,7 @@ func ContainerList(ctx context.Context) ([]Container, error) {
 	return result, nil
 }
 
-func containerEnv(ctx context.Context, containerID string) (map[string]string, error) {
+func containerEnv(ctx context.Context, containerID string) map[string]string {
 	envVars := make(map[string]string)
 	inspect, err := cli.ContainerInspect(ctx, containerID)
 	if err == nil {
@@ -124,7 +127,7 @@ func containerEnv(ctx context.Context, containerID string) (map[string]string, e
 			}
 		}
 	}
-	return envVars, nil
+	return envVars
 }
 
 // ImageExists checks if the given image:tag exists locally
@@ -143,6 +146,7 @@ func ImageExists(ctx context.Context, imageRef string) (bool, error) {
 	return false, nil
 }
 
+// ContainerStartNew creates and starts a new managed container.
 func ContainerStartNew(ctx context.Context, config Config) error {
 	imageRef := fmt.Sprintf("%v:%v", config.Image, config.Tag)
 
@@ -203,6 +207,7 @@ func ContainerStartNew(ctx context.Context, config Config) error {
 	return nil
 }
 
+// ContainerStart starts an existing container.
 func ContainerStart(ctx context.Context, containerID string) error {
 	if err := cli.ContainerStart(ctx, containerID, container.StartOptions{}); err != nil {
 		return fmt.Errorf("failed to start container: %w", err)
@@ -210,6 +215,7 @@ func ContainerStart(ctx context.Context, containerID string) error {
 	return nil
 }
 
+// ContainerStop stops a running container.
 func ContainerStop(ctx context.Context, containerID string) error {
 	if err := cli.ContainerStop(ctx, containerID, container.StopOptions{}); err != nil {
 		return fmt.Errorf("failed to stop container: %w", err)
@@ -217,6 +223,7 @@ func ContainerStop(ctx context.Context, containerID string) error {
 	return nil
 }
 
+// ContainerStopRemove stops and removes a container.
 func ContainerStopRemove(ctx context.Context, containerID string) error {
 	if err := ContainerStop(ctx, containerID); err != nil {
 		return fmt.Errorf("failed to stop container: %w", err)
@@ -227,10 +234,12 @@ func ContainerStopRemove(ctx context.Context, containerID string) error {
 	return nil
 }
 
+// ContainerInspect returns inspect details for a container.
 func ContainerInspect(ctx context.Context, containerID string) (container.InspectResponse, error) {
 	return cli.ContainerInspect(ctx, containerID)
 }
 
+// ContainerNameAvailable validates that a container name is not already in use.
 func ContainerNameAvailable(ctx context.Context, name string) error {
 	containers, err := cli.ContainerList(
 		ctx,

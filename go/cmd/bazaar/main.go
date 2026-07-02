@@ -1,3 +1,4 @@
+// Package main runs the bazaar TUI for local container management.
 package main
 
 import (

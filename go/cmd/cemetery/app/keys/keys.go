@@ -1,3 +1,4 @@
+// Package keys defines key bindings for the cemetery app.
 package keys
 
 import "github.com/charmbracelet/bubbles/key"

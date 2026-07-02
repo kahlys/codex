@@ -1,3 +1,4 @@
+// Package main runs a configurable TCP/TLS proxy.
 package main
 
 import (

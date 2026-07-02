@@ -1,3 +1,4 @@
+// Package main provides a CLI to inspect OSV scanner JSON reports.
 package main
 
 import (

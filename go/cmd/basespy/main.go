@@ -1,3 +1,4 @@
+// Package main decodes hidden bits from base32/base64 padding.
 package main
 
 import (
