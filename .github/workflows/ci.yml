@@ -22,6 +22,21 @@ jobs:
       - name: Run Go tests
         run: go test ./...
 
+  go-tests-e2e:
+    name: Run Go e2e Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.25.0'
+
+      - name: Run Go tests
+        run: go test -tags=e2e ./template/adminer/e2e
+
   go-build:
     name: Build Go Code
     runs-on: ubuntu-latest
