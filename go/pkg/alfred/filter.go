@@ -1,3 +1,4 @@
+// Package alfred provides filtering and sorting helpers.
 package alfred
 
 import (
@@ -448,6 +449,7 @@ func (f LTE) ToSQL() string {
 	return fmt.Sprintf("%s <= %s", pq.QuoteIdentifier(f.Param), pq.QuoteLiteral(f.Value))
 }
 
+// Contain keeps rows where the field contains the provided value.
 type Contain struct {
 	Param string
 	Value string

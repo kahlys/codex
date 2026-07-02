@@ -1,3 +1,4 @@
+// Package osx provides file helpers used by the oracle tool.
 package osx
 
 import (

@@ -1,3 +1,4 @@
+// Package psqlx provides helpers to open PostgreSQL connections with pgx.
 package psqlx
 
 import (
@@ -36,7 +37,7 @@ type driverPgx struct{}
 func (d driverPgx) Open(name string) (driver.Conn, error) {
 	conn, err := stdlib.GetDefaultDriver().Open(name)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrDatabaseUnreachable, err)
+		return nil, fmt.Errorf("%w: %w", ErrDatabaseUnreachable, err)
 	}
 	return conn, nil
 }

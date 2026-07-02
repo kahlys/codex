@@ -13,6 +13,7 @@ const (
 	orderDESC = "desc"
 )
 
+// Sort sorts the provided slice according to the option rules.
 // It panics if x is not a slice of structs.
 func (flt Option) Sort(slice any) {
 	v := reflect.ValueOf(slice)

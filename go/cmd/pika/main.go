@@ -1,3 +1,4 @@
+// Package main generates a local root CA and leaf certificates.
 package main
 
 import (

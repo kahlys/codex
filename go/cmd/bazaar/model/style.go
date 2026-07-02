@@ -7,10 +7,13 @@ import (
 var (
 	doc = lipgloss.NewStyle().Margin(1, 2)
 
+	// Color1 is the primary accent color.
 	Color1 = lipgloss.Color("62")
 
+	// Border is the default bordered container style.
 	Border = lipgloss.NewStyle().Border(lipgloss.NormalBorder())
 
+	// Title is the style used for the main heading.
 	Title = lipgloss.NewStyle().
 		Background(Color1).
 		PaddingLeft(1).

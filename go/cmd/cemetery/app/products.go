@@ -1,3 +1,4 @@
+// Package app contains Bubble Tea models for the cemetery TUI.
 package app
 
 import (
@@ -17,6 +18,7 @@ import (
 	"github.com/kahlys/codex/go/cmd/cemetery/app/theme"
 )
 
+// HomeModel renders and drives the products list view.
 type HomeModel struct {
 	help help.Model
 	keys keys.DefaultKeys
@@ -25,6 +27,7 @@ type HomeModel struct {
 	err  message.Error
 }
 
+// NewHomeModel creates the products list model.
 func NewHomeModel() tea.Model {
 	list := list.New(
 		[]list.Item{},
@@ -39,6 +42,7 @@ func NewHomeModel() tea.Model {
 	}
 }
 
+// Init loads products for the home view.
 func (m *HomeModel) Init() tea.Cmd {
 	return tea.Batch(
 		func() tea.Msg {
@@ -59,6 +63,7 @@ func productsToListItems(products []api.Product) []list.Item {
 	return items
 }
 
+// Update handles messages for the home view.
 func (m *HomeModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
@@ -88,6 +93,7 @@ func (m *HomeModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
+// View renders the home view.
 func (m *HomeModel) View() string {
 	if m.err != (message.Error{}) {
 		return m.err.Error()
@@ -95,6 +101,7 @@ func (m *HomeModel) View() string {
 	return theme.Container.Render(m.list.View())
 }
 
+// ProductModel displays releases for a selected product.
 type ProductModel struct {
 	uri string
 
@@ -106,6 +113,7 @@ type ProductModel struct {
 	err      message.Error
 }
 
+// NewProductModel creates a product details model.
 func NewProductModel(uri string) tea.Model {
 	return &ProductModel{
 		uri:     uri,
@@ -115,6 +123,7 @@ func NewProductModel(uri string) tea.Model {
 	}
 }
 
+// Init starts spinner updates and fetches product details.
 func (m *ProductModel) Init() tea.Cmd {
 	return tea.Batch(
 		m.spinner.Tick,
@@ -128,6 +137,7 @@ func (m *ProductModel) Init() tea.Cmd {
 	)
 }
 
+// Update handles messages for the product details view.
 func (m *ProductModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
@@ -185,6 +195,7 @@ func productToTableRows(product api.ProductInfo, limit int) [][]string {
 	return rows
 }
 
+// View renders the product details table.
 func (m *ProductModel) View() string {
 	res := theme.Title.Render(m.response.Result.Label) + "\n\n"
 

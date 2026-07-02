@@ -2,27 +2,29 @@ version: "2"
 linters:
   default: none
   enable:
-    - goconst
+    # - errcheck
+    - errorlint
+    - gocritic
     - govet
     - ineffassign
     - misspell
     - revive
     - staticcheck
+    - unconvert
+    - unparam
     - unused
   settings:
     goconst:
       min-occurrences: 5
+    govet:
+      enable:
+        - nilness
+        - reflectvaluecompare
+        - sortslice
+        - unusedwrite
   exclusions:
     generated: lax
-    presets:
-      - comments
-      - common-false-positives
-      - legacy
-      - std-error-handling
-    paths:
-      - third_party$
-      - builtin$
-      - examples$
+
 formatters:
   enable:
     - gofumpt
@@ -33,7 +35,3 @@ formatters:
         - github.com/kahlys/codex
   exclusions:
     generated: lax
-    paths:
-      - third_party$
-      - builtin$
-      - examples$

@@ -1,3 +1,4 @@
+// Package main generates an interface from methods of a target struct.
 package main
 
 import (
@@ -29,6 +30,7 @@ func main() {
 }
 
 func run(pkgPath string, structName string) (string, error) {
+	//nolint:staticcheck // parser.ParseDir is sufficient for this lightweight generator.
 	pkgs, err := parser.ParseDir(
 		token.NewFileSet(),
 		pkgPath,

