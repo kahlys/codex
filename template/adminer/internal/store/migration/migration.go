@@ -12,13 +12,19 @@ import (
 )
 
 // Migrate applies database migrations from the specified path using the provided PostgreSQL connection pool.
-func Migrate(pool *pgxpool.Pool, migrationsPath string) (version uint, err error) {
+// An optional schemaName can be provided to target a specific schema (defaults to "public").
+func Migrate(pool *pgxpool.Pool, migrationsPath string, schemaName ...string) (version uint, err error) {
 	sqlDB := stdlib.OpenDBFromPool(pool)
 	defer func() {
 		_ = sqlDB.Close()
 	}()
 
-	driver, err := postgres.WithInstance(sqlDB, &postgres.Config{})
+	cfg := &postgres.Config{}
+	if len(schemaName) > 0 && schemaName[0] != "" {
+		cfg.SchemaName = schemaName[0]
+	}
+
+	driver, err := postgres.WithInstance(sqlDB, cfg)
 	if err != nil {
 		return 0, fmt.Errorf("failed to create migration driver: %w", err)
 	}

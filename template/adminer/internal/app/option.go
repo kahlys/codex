@@ -1,4 +1,4 @@
-package adminer
+package app
 
 import "log/slog"
 

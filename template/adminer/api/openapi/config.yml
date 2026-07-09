@@ -1,0 +1,10 @@
+package: openapi
+generate:
+  gorilla-server: true
+  strict-server: true
+  models: true
+  embedded-spec: true
+output: openapi.go
+output-options:
+  skip-prune: true
+  nullable-type: true

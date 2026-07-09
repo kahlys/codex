@@ -1,10 +1,11 @@
-//go:build e2e
-
-package e2e_test
+package e2e
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"testing"
 	"time"
@@ -12,10 +13,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/ory/dockertest/v3"
 	"github.com/ory/dockertest/v3/docker"
+	"github.com/stretchr/testify/require"
 
-	"github.com/kahlys/codex/template/adminer/adminer"
-	"github.com/kahlys/codex/template/adminer/adminer/store"
-	"github.com/kahlys/codex/template/adminer/adminer/store/migration"
+	"github.com/kahlys/codex/template/adminer/internal/store"
+	"github.com/kahlys/codex/template/adminer/internal/store/migration"
 )
 
 var (
@@ -95,16 +96,32 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-func newTestServer(t *testing.T) (*adminer.Server, func()) {
+func newTestStore(t *testing.T) *store.UserStore {
 	t.Helper()
+	return store.NewUserStore(adminDB)
+}
 
-	tx, err := adminDB.Begin(t.Context())
-	if err != nil {
-		t.Fatalf("begin transaction: %v", err)
-	}
+func httpPost(t *testing.T, url string, body any) *http.Response {
+	t.Helper()
+	b, err := json.Marshal(body)
+	require.NoError(t, err)
+	resp, err := http.Post(url, "application/json", bytes.NewReader(b))
+	require.NoError(t, err)
+	t.Cleanup(func() { resp.Body.Close() })
+	return resp
+}
 
-	server := adminer.NewServer(store.NewUserStore(adminDB))
-	return server, func() {
-		tx.Rollback(t.Context())
-	}
+func httpGet(t *testing.T, url string) *http.Response {
+	t.Helper()
+	resp, err := http.Get(url)
+	require.NoError(t, err)
+	t.Cleanup(func() { resp.Body.Close() })
+	return resp
+}
+
+func decodeJSON[T any](t *testing.T, resp *http.Response) T {
+	t.Helper()
+	var v T
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&v))
+	return v
 }

@@ -9,7 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/kahlys/codex/template/adminer/adminer/store/migration"
+	"github.com/kahlys/codex/template/adminer/internal/store/migration"
 )
 
 func main() {
