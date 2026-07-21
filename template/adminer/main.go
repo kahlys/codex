@@ -47,8 +47,8 @@ func run() error {
 		slog.Error("InitFailed", "error", err, "step", "database connection")
 		return err
 	}
+	defer db.Close()
 
-	// Wrap pgxpool as *sql.DB for store
 	sqlDB := stdlib.OpenDBFromPool(db)
 
 	slog.Info("Init", "step", "database migration")
@@ -70,9 +70,6 @@ func run() error {
 		slog.Error("ServerStopped", "error", err)
 		return err
 	}
-
-	// Close the pgxpool after server shuts down
-	db.Close()
 
 	return nil
 }

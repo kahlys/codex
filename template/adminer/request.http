@@ -1,0 +1,31 @@
+GET http://localhost:8080/users
+
+###
+
+POST http://localhost:8080/users
+Content-Type: application/json
+
+{
+  "username": "Bruce Wayne",
+  "password": "joker"
+}
+
+###
+
+POST http://localhost:8080/users
+Content-Type: application/json
+
+{
+  "username": "Clark Kent",
+  "password": "luthor"
+}
+
+###
+
+POST http://localhost:8080/users
+Content-Type: application/json
+
+{
+  "username": "Diana Prince",
+  "password": "poison"
+}
