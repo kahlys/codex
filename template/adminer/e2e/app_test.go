@@ -16,16 +16,7 @@ import (
 func TestUser(t *testing.T) {
 	t.Parallel()
 
-	store := newTestStore(t)
-
-	server := httptest.NewServer(
-		openapi.Handler(
-			openapi.NewStrictHandler(
-				app.NewServer(store),
-				nil,
-			),
-		),
-	)
+	server := httptest.NewServer(app.NewServer(newTestStore(t)).Handler())
 	defer server.Close()
 
 	t.Log("Creating user alice")
