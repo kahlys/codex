@@ -9,6 +9,7 @@ import (
 	"os"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/stdlib"
 
 	"github.com/kahlys/codex/template/adminer/internal/app"
 	"github.com/kahlys/codex/template/adminer/internal/store"
@@ -47,14 +48,17 @@ func run() error {
 		return err
 	}
 
+	// Wrap pgxpool as *sql.DB for store
+	sqlDB := stdlib.OpenDBFromPool(db)
+
 	slog.Info("Init", "step", "database migration")
-	if _, err := migration.Migrate(db, "file://sql/migrations"); err != nil {
+	if _, err := migration.Migrate(sqlDB, "file://sql/migrations"); err != nil {
 		slog.Error("InitFailed", "error", err, "step", "database migrations")
 		return err
 	}
 
 	slog.Info("Init", "step", "starting server")
-	myapp := app.NewServer(store.NewUserStore(db))
+	myapp := app.NewServer(store.NewUserStore(sqlDB))
 
 	httpServer := &http.Server{
 		Addr:    "0.0.0.0:8080",
@@ -66,6 +70,9 @@ func run() error {
 		slog.Error("ServerStopped", "error", err)
 		return err
 	}
+
+	// Close the pgxpool after server shuts down
+	db.Close()
 
 	return nil
 }

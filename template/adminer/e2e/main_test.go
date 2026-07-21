@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/ory/dockertest/v3"
 	"github.com/ory/dockertest/v3/docker"
 	"github.com/stretchr/testify/require"
@@ -82,7 +83,13 @@ func TestMain(m *testing.M) {
 
 	adminDB = db
 
-	if _, err := migration.Migrate(db, "file://../sql/migrations"); err != nil {
+	// Wrap pgxpool as *sql.DB for migrations and store
+	sqlDB := stdlib.OpenDBFromPool(db)
+	defer func() {
+		_ = sqlDB.Close()
+	}()
+
+	if _, err := migration.Migrate(sqlDB, "file://../sql/migrations"); err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to run migrations: %v\n", err)
 		os.Exit(1)
 	}
@@ -98,7 +105,8 @@ func TestMain(m *testing.M) {
 
 func newTestStore(t *testing.T) *store.UserStore {
 	t.Helper()
-	return store.NewUserStore(adminDB)
+	sqlDB := stdlib.OpenDBFromPool(adminDB)
+	return store.NewUserStore(sqlDB)
 }
 
 func httpPost(t *testing.T, url string, body any) *http.Response {
