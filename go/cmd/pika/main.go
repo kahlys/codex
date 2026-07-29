@@ -56,7 +56,7 @@ func (c *PKIConfig) Generate() error {
 		Subject: pkix.Name{
 			CommonName: caName,
 		},
-		NotBefore:             time.Now(),
+		NotBefore:             time.Now().Add(-1 * time.Minute),
 		NotAfter:              time.Now().AddDate(10, 0, 0),
 		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
 		IsCA:                  true,
@@ -92,7 +92,7 @@ func (c *PKIConfig) Generate() error {
 			Subject: pkix.Name{
 				CommonName: cn,
 			},
-			NotBefore:             time.Now(),
+			NotBefore:             time.Now().Add(-1 * time.Minute),
 			NotAfter:              time.Now().AddDate(1, 0, 0),
 			KeyUsage:              x509.KeyUsageDigitalSignature,
 			ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
@@ -103,7 +103,6 @@ func (c *PKIConfig) Generate() error {
 			template.IPAddresses = []net.IP{ip}
 		} else {
 			template.DNSNames = []string{cn}
-			template.IPAddresses = []net.IP{net.ParseIP("127.0.0.1")}
 		}
 
 		certBytes, err := x509.CreateCertificate(rand.Reader, &template, &rootTemplate, &key.PublicKey, rootKey)

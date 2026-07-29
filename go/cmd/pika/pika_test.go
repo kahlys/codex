@@ -101,6 +101,7 @@ func newTLSServerAndClient(t *testing.T, dir string, pool *x509.CertPool, cn str
 	client := ts.Client()
 	if transport, ok := client.Transport.(*http.Transport); ok {
 		transport.TLSClientConfig.RootCAs = pool
+		transport.TLSClientConfig.ServerName = cn
 	}
 
 	return ts, client
