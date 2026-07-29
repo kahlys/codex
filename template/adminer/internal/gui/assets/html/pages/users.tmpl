@@ -1,0 +1,32 @@
+{{define "page:title"}}Users{{ end }}
+
+{{define "page:content"}}
+<div hx-get="/users/table" hx-trigger="load" hx-swap="innerHTML">
+  <p>Loading users...</p>
+</div>
+{{ end }}
+
+{{define "users:table"}}
+<table>
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>Username</th>
+      <th>Password</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{template "users:rows" .}}
+  </tbody>
+</table>
+{{ end }}
+
+{{define "users:rows"}}
+{{range .}}
+<tr>
+  <td>{{ .ID }}</td>
+  <td>{{ .Username }}</td>
+  <td>{{ .Password }}</td>
+</tr>
+{{ end }}
+{{ end }}
