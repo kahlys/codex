@@ -51,8 +51,13 @@ func (c *PKIConfig) Generate() error {
 		return fmt.Errorf("failed to generate root key: %w", err)
 	}
 
+	rootSerial, err := genSerial()
+	if err != nil {
+		return fmt.Errorf("failed to generate root serial: %w", err)
+	}
+
 	rootTemplate := x509.Certificate{
-		SerialNumber: genSerial(),
+		SerialNumber: rootSerial,
 		Subject: pkix.Name{
 			CommonName: caName,
 		},
@@ -72,11 +77,11 @@ func (c *PKIConfig) Generate() error {
 		return err
 	}
 
-	rootKeyBytes, err := x509.MarshalECPrivateKey(rootKey)
+	rootKeyBytes, err := x509.MarshalPKCS8PrivateKey(rootKey)
 	if err != nil {
 		return fmt.Errorf("failed to marshal root key: %w", err)
 	}
-	if err := saveFile(filepath.Join(outputDir, "root.key"), "EC PRIVATE KEY", rootKeyBytes); err != nil {
+	if err := saveFile(filepath.Join(outputDir, "root.key"), "PRIVATE KEY", rootKeyBytes); err != nil {
 		return err
 	}
 
@@ -87,8 +92,13 @@ func (c *PKIConfig) Generate() error {
 			return fmt.Errorf("[%s] failed to generate key: %w", cn, err)
 		}
 
+		serial, err := genSerial()
+		if err != nil {
+			return fmt.Errorf("[%s] failed to generate serial: %w", cn, err)
+		}
+
 		template := x509.Certificate{
-			SerialNumber: genSerial(),
+			SerialNumber: serial,
 			Subject: pkix.Name{
 				CommonName: cn,
 			},
@@ -114,12 +124,12 @@ func (c *PKIConfig) Generate() error {
 			return err
 		}
 
-		keyBytes, err := x509.MarshalECPrivateKey(key)
+		keyBytes, err := x509.MarshalPKCS8PrivateKey(key)
 		if err != nil {
 			return fmt.Errorf("[%s] failed to marshal key: %w", cn, err)
 		}
 
-		if err := saveFile(filepath.Join(outputDir, cn+".key"), "EC PRIVATE KEY", keyBytes); err != nil {
+		if err := saveFile(filepath.Join(outputDir, cn+".key"), "PRIVATE KEY", keyBytes); err != nil {
 			return err
 		}
 	}
@@ -186,10 +196,10 @@ func saveFile(path, blockType string, bytes []byte) error {
 	})
 }
 
-func genSerial() *big.Int {
+func genSerial() (*big.Int, error) {
 	serial, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
 	if err != nil {
-		panic(err)
+		return nil, fmt.Errorf("failed to generate random serial: %w", err)
 	}
-	return serial
+	return serial, nil
 }
