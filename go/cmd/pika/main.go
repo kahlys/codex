@@ -60,9 +60,18 @@ func main() {
 			Subject: pkix.Name{
 				CommonName: cn,
 			},
-			NotBefore:   time.Now(),
-			NotAfter:    time.Now().AddDate(1, 0, 0),
-			IPAddresses: []net.IP{net.ParseIP("127.0.0.1")},
+			NotBefore:             time.Now(),
+			NotAfter:              time.Now().AddDate(1, 0, 0),
+			KeyUsage:              x509.KeyUsageDigitalSignature,
+			ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+			BasicConstraintsValid: true,
+		}
+
+		if ip := net.ParseIP(cn); ip != nil {
+			template.IPAddresses = []net.IP{ip}
+		} else {
+			template.DNSNames = []string{cn}
+			template.IPAddresses = []net.IP{net.ParseIP("127.0.0.1")}
 		}
 
 		certBytes, err := x509.CreateCertificate(rand.Reader, &template, &rootTemplate, &key.PublicKey, rootKey)
