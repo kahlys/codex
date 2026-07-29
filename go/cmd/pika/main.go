@@ -87,6 +87,9 @@ func (c *PKIConfig) Generate() error {
 
 	// 2. Leaf Certificates
 	for _, cn := range c.CertCNs {
+		if strings.ContainsAny(cn, "/\\") {
+			return fmt.Errorf("[%s] invalid CN: must not contain path separators", cn)
+		}
 		key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 		if err != nil {
 			return fmt.Errorf("[%s] failed to generate key: %w", cn, err)
