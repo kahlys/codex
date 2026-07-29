@@ -1,3 +1,4 @@
+// Package main implements a simple CLI tool to generate a local test PKI.
 package main
 
 import (
@@ -17,63 +18,43 @@ import (
 	"time"
 )
 
-func main() {
-	var stack []string
-	scanner := bufio.NewScanner(os.Stdin)
-
-	for {
-		fmt.Println("\n--- PIKA MENU ---")
-		fmt.Println("1. Add certificate to queue")
-		fmt.Println("2. Generate PKI")
-		fmt.Println("3. Exit")
-		fmt.Printf("Queued certificates (%d): %v\n", len(stack), stack)
-		fmt.Print("Choice: ")
-
-		if !scanner.Scan() {
-			break
-		}
-
-		switch strings.TrimSpace(scanner.Text()) {
-		case "1":
-			fmt.Print("Enter CN (e.g. localhost, 127.0.0.1, service.local): ")
-			if scanner.Scan() {
-				cn := strings.TrimSpace(scanner.Text())
-				if cn != "" {
-					stack = append(stack, cn)
-					fmt.Printf("-> Added '%s'\n", cn)
-				}
-			}
-		case "2":
-			if len(stack) == 0 {
-				fmt.Println("-> Queue is empty. Add at least one CN.")
-				continue
-			}
-			generatePKI(stack)
-			return
-		case "3":
-			fmt.Println("Exiting.")
-			return
-		default:
-			fmt.Println("Invalid choice.")
-		}
-	}
+// PKIConfig holds the options required to generate a local test PKI.
+type PKIConfig struct {
+	OutputDir string
+	CAName    string
+	CertCNs   []string
 }
 
-func generatePKI(stack []string) {
-	outputDir := "output"
-	if err := os.MkdirAll(outputDir, 0755); err != nil {
-		panic(err)
+// Generate creates the Root CA and all queued certificates on disk.
+func (c *PKIConfig) Generate() error {
+	if len(c.CertCNs) == 0 {
+		return fmt.Errorf("queue is empty, at least one CN is required")
 	}
 
+	outputDir := c.OutputDir
+	if outputDir == "" {
+		outputDir = "output"
+	}
+
+	caName := c.CAName
+	if caName == "" {
+		caName = "Root CA"
+	}
+
+	if err := os.MkdirAll(outputDir, 0o755); err != nil {
+		return fmt.Errorf("failed to create output directory: %w", err)
+	}
+
+	// 1. Root CA
 	rootKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
-		panic(err)
+		return fmt.Errorf("failed to generate root key: %w", err)
 	}
 
 	rootTemplate := x509.Certificate{
 		SerialNumber: genSerial(),
 		Subject: pkix.Name{
-			CommonName: "Root CA",
+			CommonName: caName,
 		},
 		NotBefore:             time.Now(),
 		NotAfter:              time.Now().AddDate(10, 0, 0),
@@ -84,21 +65,26 @@ func generatePKI(stack []string) {
 
 	rootCertBytes, err := x509.CreateCertificate(rand.Reader, &rootTemplate, &rootTemplate, &rootKey.PublicKey, rootKey)
 	if err != nil {
-		panic(err)
+		return fmt.Errorf("failed to create root certificate: %w", err)
 	}
 
-	saveFile(filepath.Join(outputDir, "root.crt"), "CERTIFICATE", rootCertBytes)
+	if err := saveFile(filepath.Join(outputDir, "root.crt"), "CERTIFICATE", rootCertBytes); err != nil {
+		return err
+	}
 
 	rootKeyBytes, err := x509.MarshalECPrivateKey(rootKey)
 	if err != nil {
-		panic(err)
+		return fmt.Errorf("failed to marshal root key: %w", err)
 	}
-	saveFile(filepath.Join(outputDir, "root.key"), "EC PRIVATE KEY", rootKeyBytes)
+	if err := saveFile(filepath.Join(outputDir, "root.key"), "EC PRIVATE KEY", rootKeyBytes); err != nil {
+		return err
+	}
 
-	for _, cn := range stack {
+	// 2. Leaf Certificates
+	for _, cn := range c.CertCNs {
 		key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 		if err != nil {
-			panic(err)
+			return fmt.Errorf("[%s] failed to generate key: %w", cn, err)
 		}
 
 		template := x509.Certificate{
@@ -122,30 +108,80 @@ func generatePKI(stack []string) {
 
 		certBytes, err := x509.CreateCertificate(rand.Reader, &template, &rootTemplate, &key.PublicKey, rootKey)
 		if err != nil {
-			panic(err)
+			return fmt.Errorf("[%s] failed to create certificate: %w", cn, err)
 		}
 
-		saveFile(filepath.Join(outputDir, cn+".crt"), "CERTIFICATE", certBytes)
+		if err := saveFile(filepath.Join(outputDir, cn+".crt"), "CERTIFICATE", certBytes); err != nil {
+			return err
+		}
 
 		keyBytes, err := x509.MarshalECPrivateKey(key)
 		if err != nil {
-			panic(err)
+			return fmt.Errorf("[%s] failed to marshal key: %w", cn, err)
 		}
 
-		saveFile(filepath.Join(outputDir, cn+".key"), "EC PRIVATE KEY", keyBytes)
+		if err := saveFile(filepath.Join(outputDir, cn+".key"), "EC PRIVATE KEY", keyBytes); err != nil {
+			return err
+		}
 	}
 
-	fmt.Printf("\nDone. Generated Root CA and %d certificate(s) in './%s/'.\n", len(stack), outputDir)
+	fmt.Printf("\nDone. Generated Root CA and %d certificate(s) in './%s/'.\n", len(c.CertCNs), outputDir)
+	return nil
 }
 
-func saveFile(path, blockType string, bytes []byte) {
+func main() {
+	config := PKIConfig{
+		OutputDir: "output",
+		CAName:    "Root CA",
+	}
+
+	scanner := bufio.NewScanner(os.Stdin)
+
+	for {
+		fmt.Println("\n--- PIKA MENU ---")
+		fmt.Println("1. Add certificate to queue")
+		fmt.Println("2. Generate PKI")
+		fmt.Println("3. Exit")
+		fmt.Printf("Queued certificates (%d): %v\n", len(config.CertCNs), config.CertCNs)
+		fmt.Print("Choice: ")
+
+		if !scanner.Scan() {
+			break
+		}
+
+		switch strings.TrimSpace(scanner.Text()) {
+		case "1":
+			fmt.Print("Enter CN (e.g. localhost, 127.0.0.1, service.local): ")
+			if scanner.Scan() {
+				cn := strings.TrimSpace(scanner.Text())
+				if cn != "" {
+					config.CertCNs = append(config.CertCNs, cn)
+					fmt.Printf("-> Added '%s'\n", cn)
+				}
+			}
+		case "2":
+			if err := config.Generate(); err != nil {
+				fmt.Printf("-> Error: %v\n", err)
+				continue
+			}
+			return
+		case "3":
+			fmt.Println("Exiting.")
+			return
+		default:
+			fmt.Println("Invalid choice.")
+		}
+	}
+}
+
+func saveFile(path, blockType string, bytes []byte) error {
 	file, err := os.Create(path)
 	if err != nil {
-		panic(err)
+		return fmt.Errorf("failed to create file %s: %w", path, err)
 	}
 	defer file.Close()
 
-	pem.Encode(file, &pem.Block{
+	return pem.Encode(file, &pem.Block{
 		Type:  blockType,
 		Bytes: bytes,
 	})
