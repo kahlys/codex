@@ -197,9 +197,14 @@ func saveFile(path, blockType string, bytes []byte) error {
 }
 
 func genSerial() (*big.Int, error) {
-	serial, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate random serial: %w", err)
+	limit := new(big.Int).Lsh(big.NewInt(1), 128)
+	for {
+		serial, err := rand.Int(rand.Reader, limit)
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate random serial: %w", err)
+		}
+		if serial.Sign() > 0 {
+			return serial, nil
+		}
 	}
-	return serial, nil
 }
