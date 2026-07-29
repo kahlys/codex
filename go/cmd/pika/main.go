@@ -1,9 +1,9 @@
-// Package main generates a local root CA and leaf certificates.
 package main
 
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rand"
-	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
@@ -14,7 +14,7 @@ import (
 )
 
 func main() {
-	rootKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	rootKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		panic(err)
 	}
@@ -50,7 +50,7 @@ func main() {
 	rootCertFile.Close()
 
 	for _, cn := range os.Args[1:] {
-		key, err := rsa.GenerateKey(rand.Reader, 2048)
+		key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 		if err != nil {
 			panic(err)
 		}
@@ -87,9 +87,14 @@ func main() {
 			panic(err)
 		}
 
+		keyBytes, err := x509.MarshalECPrivateKey(key)
+		if err != nil {
+			panic(err)
+		}
+
 		pem.Encode(keyFile, &pem.Block{
-			Type:  "RSA PRIVATE KEY",
-			Bytes: x509.MarshalPKCS1PrivateKey(key),
+			Type:  "EC PRIVATE KEY",
+			Bytes: keyBytes,
 		})
 
 		keyFile.Close()
