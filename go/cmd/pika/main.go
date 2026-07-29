@@ -20,7 +20,7 @@ func main() {
 	}
 
 	rootTemplate := x509.Certificate{
-		SerialNumber: big.NewInt(1),
+		SerialNumber: genSerial(),
 		Subject: pkix.Name{
 			CommonName: "Root CA",
 		},
@@ -56,7 +56,7 @@ func main() {
 		}
 
 		template := x509.Certificate{
-			SerialNumber: big.NewInt(2),
+			SerialNumber: genSerial(),
 			Subject: pkix.Name{
 				CommonName: cn,
 			},
@@ -99,4 +99,12 @@ func main() {
 
 		keyFile.Close()
 	}
+}
+
+func genSerial() *big.Int {
+	serial, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
+	if err != nil {
+		panic(err)
+	}
+	return serial
 }
