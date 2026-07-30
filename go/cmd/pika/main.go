@@ -2,7 +2,6 @@
 package main
 
 import (
-	"bufio"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -16,6 +15,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"charm.land/huh/v2"
 )
 
 // PKIConfig holds the options required to generate a local test PKI.
@@ -27,10 +28,6 @@ type PKIConfig struct {
 
 // Generate creates the Root CA and all queued certificates on disk.
 func (c *PKIConfig) Generate() error {
-	if len(c.CertCNs) == 0 {
-		return fmt.Errorf("queue is empty, at least one CN is required")
-	}
-
 	outputDir := c.OutputDir
 	if outputDir == "" {
 		outputDir = "output"
@@ -142,52 +139,76 @@ func (c *PKIConfig) Generate() error {
 }
 
 func main() {
+	if err := run(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+const (
+	actionAdd      = "add"
+	actionGenerate = "generate"
+	actionExit     = "exit"
+)
+
+func run() error {
 	config := PKIConfig{
 		OutputDir: "output",
 		CAName:    "Root CA",
+		CertCNs:   []string{},
 	}
 
-	scanner := bufio.NewScanner(os.Stdin)
+	fmt.Printf("=====[ PIKA ] =====\n\n")
 
 	for {
-		fmt.Println("\n--- PIKA MENU ---")
-		fmt.Println("1. Add certificate to queue")
-		fmt.Println("2. Generate PKI")
-		fmt.Println("3. Exit")
-		fmt.Printf("Queued certificates (%d): %v\n", len(config.CertCNs), config.CertCNs)
-		fmt.Print("Choice: ")
+		var choice string
 
-		if !scanner.Scan() {
-			break
+		if err := huh.NewForm(
+			huh.NewGroup(
+				huh.NewSelect[string]().
+					Title(fmt.Sprintf("PIKA (%d in queue)", len(config.CertCNs))).
+					Options(
+						huh.NewOption("Add certificate to queue", actionAdd),
+						huh.NewOption("Generate PKI", actionGenerate),
+						huh.NewOption("Exit", actionExit),
+					).
+					Value(&choice),
+			),
+		).Run(); err != nil {
+			return err
 		}
 
-		switch strings.TrimSpace(scanner.Text()) {
-		case "1":
-			fmt.Print("Enter CN (e.g. localhost, 127.0.0.1, service.local): ")
-			if scanner.Scan() {
-				cn := strings.TrimSpace(scanner.Text())
-				if cn != "" {
-					config.CertCNs = append(config.CertCNs, cn)
-					fmt.Printf("-> Added '%s'\n", cn)
-				}
+		switch choice {
+
+		case actionAdd:
+			var cn string
+			huh.NewInput().
+				Title("Enter CN (e.g. localhost, 127.0.0.1, service.local): ").
+				Value(&cn).
+				Run()
+			cn = strings.TrimSpace(cn)
+			if cn != "" {
+				config.CertCNs = append(config.CertCNs, cn)
+				fmt.Printf("-> Added '%s'\n", cn)
 			}
-		case "2":
+
+		case actionGenerate:
 			if err := config.Generate(); err != nil {
 				fmt.Printf("-> Error: %v\n", err)
 				continue
 			}
-			return
-		case "3":
-			fmt.Println("Exiting.")
-			return
-		default:
-			fmt.Println("Invalid choice.")
+			return nil
+
+		case actionExit:
+			return nil
+
 		}
 	}
 }
 
+// saveFile writes the given bytes to a file at the specified path, encoding it as a PEM block with the given type.
 func saveFile(path, blockType string, bytes []byte) error {
-	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
 		return fmt.Errorf("failed to create file %s: %w", path, err)
 	}
@@ -199,6 +220,7 @@ func saveFile(path, blockType string, bytes []byte) error {
 	})
 }
 
+// genSerial generates a random positive serial number for certificates.
 func genSerial() (*big.Int, error) {
 	limit := new(big.Int).Lsh(big.NewInt(1), 128)
 	for {
