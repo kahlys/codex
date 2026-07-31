@@ -324,7 +324,7 @@ func containers() []container {
 			ID:      c.ID,
 			Name:    strings.TrimPrefix(c.Names[0], "/"),
 			Image:   c.Image,
-			State:   c.State,
+			State:   string(c.State),
 			Status:  c.Status,
 			Ports:   ports,
 			Created: time.Unix(c.Created, 0),

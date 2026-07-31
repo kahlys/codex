@@ -5,14 +5,12 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/netip"
 	"strings"
 
-	"github.com/docker/docker/api/types"
-	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/filters"
-	"github.com/docker/docker/api/types/image"
-	"github.com/docker/docker/client"
-	"github.com/docker/go-connections/nat"
+	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/api/types/network"
+	"github.com/moby/moby/client"
 )
 
 const (
@@ -38,7 +36,7 @@ type Config struct {
 
 func init() {
 	var err error
-	cli, err = client.NewClientWithOpts(client.FromEnv)
+	cli, err = client.New(client.FromEnv)
 	if err != nil {
 		panic(err)
 	}
@@ -46,11 +44,10 @@ func init() {
 
 // Container wraps Docker container metadata with inspect-derived details.
 type Container struct {
-	types.Container
+	*container.Summary
 
-	Env map[string]string
-
-	BindingPorts nat.PortMap
+	Env          map[string]string
+	PortBindings network.PortMap
 	ExitError    string
 	ExitCode     int
 }
@@ -68,7 +65,7 @@ func (c Container) String() string {
 		fmt.Fprintf(&sb, "    %s=%s\n", k, v)
 	}
 	sb.WriteString("  BindingPorts:\n")
-	for p, bindings := range c.BindingPorts {
+	for p, bindings := range c.PortBindings {
 		fmt.Fprintf(&sb, "    %v:\n", p)
 		for _, b := range bindings {
 			fmt.Fprintf(&sb, "      - %s:%s\n", b.HostIP, b.HostPort)
@@ -83,12 +80,12 @@ func (c Container) String() string {
 
 // ContainerList returns all managed containers with enriched metadata.
 func ContainerList(ctx context.Context) ([]Container, error) {
-	filter := filters.NewArgs()
+	filter := client.Filters{}
 	filter.Add("label", fmt.Sprintf("%s=%s", managedByLabelKey, managedByLabelValue))
 
-	containers, err := cli.ContainerList(
+	containerListResult, err := cli.ContainerList(
 		ctx,
-		container.ListOptions{
+		client.ContainerListOptions{
 			All:     true,
 			Filters: filter,
 		},
@@ -97,18 +94,18 @@ func ContainerList(ctx context.Context) ([]Container, error) {
 		return nil, err
 	}
 
-	result := make([]Container, len(containers))
-	for i, c := range containers {
+	result := make([]Container, len(containerListResult.Items))
+	for i, c := range containerListResult.Items {
 		envvars := containerEnv(ctx, c.ID)
 
-		inspect, _ := cli.ContainerInspect(ctx, c.ID)
+		inspect, _ := cli.ContainerInspect(ctx, c.ID, client.ContainerInspectOptions{})
 
 		result[i] = Container{
-			Container:    c,
+			Summary:      &c,
 			Env:          envvars,
-			BindingPorts: inspect.HostConfig.PortBindings,
-			ExitError:    inspect.State.Error,
-			ExitCode:     inspect.State.ExitCode,
+			PortBindings: inspect.Container.HostConfig.PortBindings,
+			ExitError:    inspect.Container.State.Error,
+			ExitCode:     inspect.Container.State.ExitCode,
 		}
 	}
 	return result, nil
@@ -116,9 +113,9 @@ func ContainerList(ctx context.Context) ([]Container, error) {
 
 func containerEnv(ctx context.Context, containerID string) map[string]string {
 	envVars := make(map[string]string)
-	inspect, err := cli.ContainerInspect(ctx, containerID)
+	inspect, err := cli.ContainerInspect(ctx, containerID, client.ContainerInspectOptions{})
 	if err == nil {
-		for _, env := range inspect.Config.Env {
+		for _, env := range inspect.Container.Config.Env {
 			if len(env) > 0 {
 				parts := strings.SplitN(env, "=", 2)
 				if len(parts) == 2 {
@@ -132,11 +129,11 @@ func containerEnv(ctx context.Context, containerID string) map[string]string {
 
 // ImageExists checks if the given image:tag exists locally
 func ImageExists(ctx context.Context, imageRef string) (bool, error) {
-	images, err := cli.ImageList(ctx, image.ListOptions{})
+	imageListResult, err := cli.ImageList(ctx, client.ImageListOptions{})
 	if err != nil {
 		return false, err
 	}
-	for _, img := range images {
+	for _, img := range imageListResult.Items {
 		for _, tag := range img.RepoTags {
 			if tag == imageRef {
 				return true, nil
@@ -150,13 +147,12 @@ func ImageExists(ctx context.Context, imageRef string) (bool, error) {
 func ContainerStartNew(ctx context.Context, config Config) error {
 	imageRef := fmt.Sprintf("%v:%v", config.Image, config.Tag)
 
-	// Use ImageExists helper
 	found, err := ImageExists(ctx, imageRef)
 	if err != nil {
 		return fmt.Errorf("failed to check image existence: %w", err)
 	}
 	if !found {
-		out, err := cli.ImagePull(ctx, imageRef, image.PullOptions{})
+		out, err := cli.ImagePull(ctx, imageRef, client.ImagePullOptions{})
 		if err != nil {
 			return fmt.Errorf("failed to pull image %s: %w", imageRef, err)
 		}
@@ -165,36 +161,41 @@ func ContainerStartNew(ctx context.Context, config Config) error {
 		_, _ = io.Copy(io.Discard, out)
 	}
 
-	containerPort, err := nat.NewPort("tcp", config.ContainerPort)
+	containerPort, err := network.ParsePort(config.ContainerPort)
+	if err != nil {
+		return fmt.Errorf("failed to parse container port: %w", err)
+	}
+
+	hostIP, err := netip.ParseAddr(config.HostIP)
 	if err != nil {
 		return fmt.Errorf("failed to create port: %w", err)
 	}
 
 	resp, err := cli.ContainerCreate(
 		ctx,
-		&container.Config{
-			Image: imageRef,
-			Env:   config.Env,
-			ExposedPorts: nat.PortSet{
-				containerPort: struct{}{},
-			},
-			Labels: map[string]string{
-				managedByLabelKey: managedByLabelValue,
-			},
-		},
-		&container.HostConfig{
-			PortBindings: nat.PortMap{
-				containerPort: []nat.PortBinding{
-					{HostIP: config.HostIP, HostPort: config.HostPort},
+		client.ContainerCreateOptions{
+			Name: strings.ToLower(config.Name),
+			Config: &container.Config{
+				Image: imageRef,
+				Env:   config.Env,
+				ExposedPorts: network.PortSet{
+					containerPort: {},
+				},
+				Labels: map[string]string{
+					managedByLabelKey: managedByLabelValue,
 				},
 			},
-			RestartPolicy: container.RestartPolicy{
-				Name: "unless-stopped",
+			HostConfig: &container.HostConfig{
+				PortBindings: network.PortMap{
+					containerPort: {
+						{HostIP: hostIP, HostPort: config.HostPort},
+					},
+				},
+				RestartPolicy: container.RestartPolicy{
+					Name: "unless-stopped",
+				},
 			},
 		},
-		nil,
-		nil,
-		config.Name,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create container: %w", err)
@@ -209,7 +210,8 @@ func ContainerStartNew(ctx context.Context, config Config) error {
 
 // ContainerStart starts an existing container.
 func ContainerStart(ctx context.Context, containerID string) error {
-	if err := cli.ContainerStart(ctx, containerID, container.StartOptions{}); err != nil {
+	_, err := cli.ContainerStart(ctx, containerID, client.ContainerStartOptions{})
+	if err != nil {
 		return fmt.Errorf("failed to start container: %w", err)
 	}
 	return nil
@@ -217,7 +219,8 @@ func ContainerStart(ctx context.Context, containerID string) error {
 
 // ContainerStop stops a running container.
 func ContainerStop(ctx context.Context, containerID string) error {
-	if err := cli.ContainerStop(ctx, containerID, container.StopOptions{}); err != nil {
+	_, err := cli.ContainerStop(ctx, containerID, client.ContainerStopOptions{})
+	if err != nil {
 		return fmt.Errorf("failed to stop container: %w", err)
 	}
 	return nil
@@ -228,7 +231,8 @@ func ContainerStopRemove(ctx context.Context, containerID string) error {
 	if err := ContainerStop(ctx, containerID); err != nil {
 		return fmt.Errorf("failed to stop container: %w", err)
 	}
-	if err := cli.ContainerRemove(ctx, containerID, container.RemoveOptions{Force: true}); err != nil {
+	_, err := cli.ContainerRemove(ctx, containerID, client.ContainerRemoveOptions{Force: true})
+	if err != nil {
 		return fmt.Errorf("failed to remove container: %w", err)
 	}
 	return nil
@@ -236,20 +240,24 @@ func ContainerStopRemove(ctx context.Context, containerID string) error {
 
 // ContainerInspect returns inspect details for a container.
 func ContainerInspect(ctx context.Context, containerID string) (container.InspectResponse, error) {
-	return cli.ContainerInspect(ctx, containerID)
+	result, err := cli.ContainerInspect(ctx, containerID, client.ContainerInspectOptions{})
+	if err != nil {
+		return container.InspectResponse{}, err
+	}
+	return result.Container, nil
 }
 
 // ContainerNameAvailable validates that a container name is not already in use.
 func ContainerNameAvailable(ctx context.Context, name string) error {
-	containers, err := cli.ContainerList(
+	containerListResult, err := cli.ContainerList(
 		ctx,
-		container.ListOptions{All: true},
+		client.ContainerListOptions{All: true},
 	)
 	if err != nil {
 		return fmt.Errorf("failed to list containers: %w", err)
 	}
 
-	for _, c := range containers {
+	for _, c := range containerListResult.Items {
 		if len(c.Names) > 0 && strings.TrimPrefix(c.Names[0], "/") == name {
 			return fmt.Errorf("container name %s is already in use", name)
 		}
