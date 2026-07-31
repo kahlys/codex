@@ -4,7 +4,7 @@ package main
 import (
 	"log"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/kahlys/codex/go/cmd/bazaar/model"
 )
@@ -12,7 +12,6 @@ import (
 func main() {
 	if _, err := tea.NewProgram(
 		model.NewContainersModel(),
-		tea.WithAltScreen(),
 	).Run(); err != nil {
 		log.Fatal(err)
 	}

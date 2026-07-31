@@ -5,7 +5,7 @@ import (
 	"log"
 	"os"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/kahlys/codex/go/cmd/cemetery/app"
 )
@@ -21,7 +21,6 @@ func main() {
 
 	if _, err := tea.NewProgram(
 		app.NewHomeModel(),
-		tea.WithAltScreen(),
 	).Run(); err != nil {
 		log.Printf("program failed: %v", err)
 		return

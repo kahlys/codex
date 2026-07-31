@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/huh"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/huh/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/kahlys/codex/go/cmd/bazaar/internal/dockerx"
 	"github.com/kahlys/codex/go/cmd/bazaar/internal/teax"
@@ -182,7 +182,7 @@ func (m CreateModel) selectedImage() string {
 }
 
 // View renders the UI based on the current step.
-func (m CreateModel) View() string {
+func (m CreateModel) View() tea.View {
 	var formView string
 	switch m.step {
 	case stepImage:
@@ -195,13 +195,15 @@ func (m CreateModel) View() string {
 
 	borderH, borderV := borderSize()
 
-	return lipgloss.JoinVertical(
-		lipgloss.Left,
-		titleView(),
-		Border.
-			Width(m.width-borderH).
-			Height(m.height-borderV).
-			Render(formView),
+	return teax.View(
+		lipgloss.JoinVertical(
+			lipgloss.Left,
+			titleView(),
+			Border.
+				Width(m.width-borderH).
+				Height(m.height-borderV).
+				Render(formView),
+		),
 	)
 }
 

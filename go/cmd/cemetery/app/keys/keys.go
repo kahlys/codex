@@ -1,7 +1,7 @@
 // Package keys defines key bindings for the cemetery app.
 package keys
 
-import "github.com/charmbracelet/bubbles/key"
+import "charm.land/bubbles/v2/key"
 
 // DefaultKeys are the default keybindings for the app.
 type DefaultKeys struct {
