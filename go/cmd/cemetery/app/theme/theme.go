@@ -1,6 +1,8 @@
 package theme
 
-import "github.com/charmbracelet/lipgloss"
+import (
+	"charm.land/lipgloss/v2"
+)
 
 // Container is the outer layout style for views.
 var Container = lipgloss.NewStyle().Margin(1, 2)
@@ -9,7 +11,7 @@ var (
 	// Color1 is the primary accent color.
 	Color1 = lipgloss.Color("62")
 	// Color2 is the secondary accent color.
-	Color2 = lipgloss.AdaptiveColor{Light: "#EE6FF8", Dark: "#EE6FF8"}
+	Color2 = lipgloss.Color("#EE6FF8")
 )
 
 var (

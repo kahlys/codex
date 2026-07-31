@@ -4,13 +4,13 @@ package app
 import (
 	"fmt"
 
-	"github.com/charmbracelet/bubbles/help"
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/list"
-	"github.com/charmbracelet/bubbles/spinner"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/lipgloss/table"
+	"charm.land/bubbles/v2/help"
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/list"
+	"charm.land/bubbles/v2/spinner"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
+	"charm.land/lipgloss/v2/table"
 
 	"github.com/kahlys/codex/go/cmd/cemetery/api"
 	"github.com/kahlys/codex/go/cmd/cemetery/app/keys"
@@ -94,11 +94,16 @@ func (m *HomeModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // View renders the home view.
-func (m *HomeModel) View() string {
+func (m *HomeModel) View() tea.View {
+	v := tea.View{}
+	v.AltScreen = true
+
 	if m.err != (message.Error{}) {
-		return m.err.Error()
+		v.SetContent(m.err.Error())
+	} else {
+		v.SetContent(theme.Container.Render(m.list.View()))
 	}
-	return theme.Container.Render(m.list.View())
+	return v
 }
 
 // ProductModel displays releases for a selected product.
@@ -196,7 +201,7 @@ func productToTableRows(product api.ProductInfo, limit int) [][]string {
 }
 
 // View renders the product details table.
-func (m *ProductModel) View() string {
+func (m *ProductModel) View() tea.View {
 	res := theme.Title.Render(m.response.Result.Label) + "\n\n"
 
 	t := table.New().
@@ -214,9 +219,11 @@ func (m *ProductModel) View() string {
 
 	res += t.Render() + "\n\n" + m.help.View(m.keys)
 
-	return theme.Container.Render(res)
+	v := tea.NewView(theme.Container.Render(res))
+	v.AltScreen = true
+	return v
 }
 
 func goToNewModel(m tea.Model) (tea.Model, tea.Cmd) {
-	return m, tea.Batch(m.Init(), tea.WindowSize())
+	return m, tea.Batch(m.Init(), tea.RequestWindowSize)
 }

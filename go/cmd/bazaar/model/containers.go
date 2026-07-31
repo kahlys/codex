@@ -7,12 +7,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/help"
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/list"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/huh"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/help"
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/list"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/huh/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/kahlys/codex/go/cmd/bazaar/internal/dockerx"
 	"github.com/kahlys/codex/go/cmd/bazaar/internal/teax"
@@ -192,25 +192,27 @@ func startStopContainer(id, state string) tea.Cmd {
 }
 
 // View renders the ContainersModel view.
-func (m ContainersModel) View() string {
+func (m ContainersModel) View() tea.View {
 	if m.deleteState == deleting {
 		return m.deleteView()
 	}
 	return m.listView()
 }
 
-func (m ContainersModel) deleteView() string {
-	return lipgloss.NewStyle().
-		Width(44).
-		Height(7).
-		Border(lipgloss.RoundedBorder()).
-		Align(lipgloss.Center).
-		MarginTop((m.height - 7) / 2).
-		MarginLeft((m.width - 44) / 2).
-		Render(m.deleteForm.View())
+func (m ContainersModel) deleteView() tea.View {
+	return teax.View(
+		lipgloss.NewStyle().
+			Width(44).
+			Height(7).
+			Border(lipgloss.RoundedBorder()).
+			Align(lipgloss.Center).
+			MarginTop((m.height - 7) / 2).
+			MarginLeft((m.width - 44) / 2).
+			Render(m.deleteForm.View()),
+	)
 }
 
-func (m ContainersModel) listView() string {
+func (m ContainersModel) listView() tea.View {
 	detail := "No container selected."
 	if sel := m.list.SelectedItem(); sel != nil {
 		if c, ok := sel.(container); ok {
@@ -218,21 +220,23 @@ func (m ContainersModel) listView() string {
 		}
 	}
 
-	return lipgloss.JoinVertical(
-		lipgloss.Left,
-		titleView(),
-		lipgloss.JoinHorizontal(
-			lipgloss.Top,
-			Border.
-				Height(m.list.Height()).
-				Width(m.list.Width()).
-				Render(m.list.View()),
-			Border.
-				Height(m.infoHeight).
-				Width(m.infoWidth).
-				Render(detail),
+	return teax.View(
+		lipgloss.JoinVertical(
+			lipgloss.Left,
+			titleView(),
+			lipgloss.JoinHorizontal(
+				lipgloss.Top,
+				Border.
+					Height(m.list.Height()).
+					Width(m.list.Width()).
+					Render(m.list.View()),
+				Border.
+					Height(m.infoHeight).
+					Width(m.infoWidth).
+					Render(detail),
+			),
+			m.helpView(),
 		),
-		m.helpView(),
 	)
 }
 

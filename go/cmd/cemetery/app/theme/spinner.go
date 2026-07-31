@@ -1,7 +1,7 @@
 // Package theme defines shared styles and widgets for the cemetery app.
 package theme
 
-import "github.com/charmbracelet/bubbles/spinner"
+import "charm.land/bubbles/v2/spinner"
 
 // NewSpinner returns the default spinner used by the app.
 func NewSpinner() spinner.Model {
