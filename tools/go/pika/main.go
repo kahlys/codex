@@ -1,4 +1,3 @@
-// Package main implements a simple CLI tool to generate a local test PKI.
 package main
 
 import (
