@@ -1,34 +1,29 @@
-name: Lint
+name: Lint Code
+
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
   pull_request:
-
-permissions:
-  contents: read
 
 jobs:
   golangci:
-    name: go lint
+    name: Go Lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-go@v6
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
         with:
-          go-version: 'stable'
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@v9
+          go-version: '1.27.0'
+      - uses: golangci/golangci-lint-action@v9
         with:
           version: v2.12
 
   rust-lint:
-    name: Rust Lint
+    name: Rust Lint (Clippy)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install Rust
-        uses: actions-rs/toolchain@v1
+      - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
       - name: Run cargo clippy

@@ -1,0 +1,149 @@
+]633;E;for f in .github/workflows/*\x3b do echo "=== FICHIER: $f ==="\x3b cat "$f"\x3b echo -e "\\n"\x3b done >> res.txt;01cb87c8-7623-4d88-8961-6e7dcb1d390f]633;C=== FICHIER: .github/workflows/ci-go.yml ===
+name: Go CI
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+  pull_request:
+    paths:
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+
+jobs:
+  # On appelle le workflow réutilisable qu'on vient de créer
+  call-go-ci:
+    uses: ./.github/workflows/reusable-go.yml
+    with:
+      working-directory: '.'          # Mets le dossier de ton projet (ex: '.' si c'est à la racine, ou 'backend/' si c'est dans un sous-dossier)
+      go-version: '1.27.0'            # La version de Go que tu souhaites utiliser
+
+=== FICHIER: .github/workflows/ci-rust.yml ===
+name: Rust CI
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '**.rs'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+  pull_request:
+    paths:
+      - '**.rs'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+
+jobs:
+  call-rust-ci:
+    uses: ./.github/workflows/reusable-rust.yml
+    with:
+      working-directory: '.'        # Mets ton dossier (ex: '.' si c'est à la racine)
+      toolchain: 'stable'           # Ou une version spécifique (ex: '1.75.0')
+
+=== FICHIER: .github/workflows/lint.yml ===
+name: Lint Code
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  golangci:
+    name: Go Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.0'
+      - uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.12
+
+  rust-lint:
+    name: Rust Lint (Clippy)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+      - name: Run cargo clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+=== FICHIER: .github/workflows/reusable-go.yml ===
+name: Reusable Go CI
+
+on:
+  workflow_call:
+    inputs:
+      working-directory:
+        required: true
+        type: string
+      go-version:
+        required: false
+        type: string
+        default: '1.27.0'
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ inputs.go-version }}
+
+      - name: Run tests
+        working-directory: ${{ inputs.working-directory }}
+        run: go test ./...
+
+      - name: Build
+        working-directory: ${{ inputs.working-directory }}
+        run: go build ./...
+
+=== FICHIER: .github/workflows/reusable-rust.yml ===
+name: Reusable Rust CI
+
+on:
+  workflow_call:
+    inputs:
+      working-directory:
+        required: true
+        type: string
+      toolchain:
+        required: false
+        type: string
+        default: 'stable'
+
+jobs:
+  rust-pipeline:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ inputs.toolchain }}
+
+      - name: Run tests
+        working-directory: ${{ inputs.working-directory }}
+        run: cargo test
+
+      - name: Build
+        working-directory: ${{ inputs.working-directory }}
+        run: cargo build --release
+

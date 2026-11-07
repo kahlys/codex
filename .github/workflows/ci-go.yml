@@ -1,0 +1,23 @@
+name: Go CI
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+  pull_request:
+    paths:
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+
+jobs:
+  # On appelle le workflow réutilisable qu'on vient de créer
+  call-go-ci:
+    uses: ./.github/workflows/reusable-go.yml
+    with:
+      working-directory: '.'          # Mets le dossier de ton projet (ex: '.' si c'est à la racine, ou 'backend/' si c'est dans un sous-dossier)
+      go-version: '1.27.0'            # La version de Go que tu souhaites utiliser
