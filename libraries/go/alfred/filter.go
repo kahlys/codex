@@ -28,7 +28,7 @@ type Option struct {
 	Filters Filters
 }
 
-var paramFilter = regexp.MustCompile(`([a-zA-Z0-9_\-]+)\[([a-zA-Z0-9_\-]+)\]\[([a-zA-Z0-9_\-]+)\]`)
+var paramFilter = regexp.MustCompile(`^([a-zA-Z0-9_\-]+)\[([a-zA-Z0-9_\-]+)\]\[([a-zA-Z0-9_\-]+)\]$`)
 
 // ParseURLValues parse filters from url values. The format is '?filter[<>][<type>]=<value>'.
 // Possible type are : like, eq, gt, gte, lt, lte, contain.
