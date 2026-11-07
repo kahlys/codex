@@ -14,6 +14,7 @@ type WDataBlob struct {
 	PbData *byte
 }
 
+// NewBlob creates a new WDataBlob from the given byte slice.
 func NewBlob(d []byte) *WDataBlob {
 	if len(d) == 0 {
 		return &WDataBlob{}
@@ -24,6 +25,7 @@ func NewBlob(d []byte) *WDataBlob {
 	}
 }
 
+// Bytes returns the byte slice representation of the WDataBlob.
 func (b *WDataBlob) Bytes() []byte {
 	d := make([]byte, b.CbData)
 	copy(d, (*[1 << 30]byte)(unsafe.Pointer(b.PbData))[:])
