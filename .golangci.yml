@@ -24,6 +24,9 @@ linters:
         - unusedwrite
   exclusions:
     generated: lax
+    rules:
+    - linters: [revive]
+      text: "package-comments"
 
 formatters:
   enable:

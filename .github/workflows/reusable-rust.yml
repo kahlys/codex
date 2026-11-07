@@ -1,0 +1,26 @@
+name: Reusable Rust CI
+
+on:
+  workflow_call:
+    inputs:
+      working-directory:
+        required: true
+        type: string
+      toolchain:
+        required: false
+        type: string
+        default: 'stable'
+
+jobs:
+  rust-pipeline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Run tests
+        working-directory: ${{ inputs.working-directory }}
+        run: cargo test --verbose
+
+      - name: Build
+        working-directory: ${{ inputs.working-directory }}
+        run: cargo build --verbose

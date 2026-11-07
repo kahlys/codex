@@ -1,0 +1,21 @@
+name: Go CI
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+  pull_request:
+    paths:
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+
+jobs:
+  global-go:
+    uses: ./.github/workflows/reusable-go.yml
+    with:
+      working-directory: '.'
