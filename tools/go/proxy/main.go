@@ -6,7 +6,7 @@ import (
 	"flag"
 	"log"
 
-	"github.com/kahlys/codex/go/cmd/proxy/internal/proxy"
+	"github.com/kahlys/codex/tools/go/proxy/internal/proxy"
 )
 
 var (
