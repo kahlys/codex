@@ -20,6 +20,7 @@ type Option struct {
 	Offset int
 
 	// sorting
+	// Order is 'asc', 'desc', or empty to keep the default (ascending) order.
 	Order  string
 	SortBy string
 
@@ -27,10 +28,12 @@ type Option struct {
 	Filters Filters
 }
 
-var paramFilter = regexp.MustCompile(`([a-zA-Z1-9_\-]+)\[([a-zA-Z1-9_\-]+)\]\[([a-zA-Z1-9_\-]+)\]`)
+var paramFilter = regexp.MustCompile(`([a-zA-Z0-9_\-]+)\[([a-zA-Z0-9_\-]+)\]\[([a-zA-Z0-9_\-]+)\]`)
 
 // ParseURLValues parse filters from url values. The format is '?filter[<>][<type>]=<value>'.
-// Possible type are : like, eq, gt, gte, lt, lte.
+// Possible type are : like, eq, gt, gte, lt, lte, contain.
+// The 'orderBy' value is normalized to 'asc' or 'desc' and left empty when absent,
+// so it can be safely used in a SQL ORDER BY clause.
 func ParseURLValues(values url.Values) Option {
 	var err error
 	f := Option{}
@@ -46,7 +49,7 @@ func ParseURLValues(values url.Values) Option {
 	}
 
 	f.SortBy = values.Get("sortBy")
-	f.Order = values.Get("orderBy")
+	f.Order = parseOrder(values.Get("orderBy"))
 
 	for k, v := range values {
 		matches := paramFilter.FindStringSubmatch(k)
@@ -91,6 +94,22 @@ func (fs Filters) Keep(v any) (bool, error) {
 	return true, nil
 }
 
+// parseOrder returns the SQL sort direction for order: orderASC, orderDESC, or ""
+// when no direction is requested (Postgres then sorts ascending by default).
+// A direction is a keyword, so unlike a value or an identifier it cannot be
+// quoted: it is picked from this fixed set instead, which keeps client input out
+// of the ORDER BY clause.
+func parseOrder(order string) string {
+	switch strings.ToLower(strings.TrimSpace(order)) {
+	case orderASC:
+		return orderASC
+	case orderDESC:
+		return orderDESC
+	default:
+		return ""
+	}
+}
+
 // AddToPSQLQuery add filter to a pq query.
 // SELECT *, count(*) OVER() FROM (<query>) AS query WHERE <filter1> ILIKE <value1> AND ... ORDER BY <sortBy> <order> LIMIT 1 OFFSET 1
 func AddToPSQLQuery(query string, opt Option) string {
@@ -108,7 +127,11 @@ func AddToPSQLQuery(query string, opt Option) string {
 
 	// sorting
 	if opt.SortBy != "" {
-		query = fmt.Sprintf("%v ORDER BY %v %v", query, pq.QuoteIdentifier(opt.SortBy), opt.Order)
+		sortClause := pq.QuoteIdentifier(opt.SortBy)
+		if order := parseOrder(opt.Order); order != "" {
+			sortClause = fmt.Sprintf("%v %v", sortClause, order)
+		}
+		query = fmt.Sprintf("%v ORDER BY %v", query, sortClause)
 	}
 	// pagination
 	limit := fmt.Sprintf("%v", opt.Limit)
