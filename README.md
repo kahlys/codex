@@ -1,7 +1,8 @@
 # codex
 
 [![Lint](https://github.com/kahlys/codex/actions/workflows/lint.yml/badge.svg)](https://github.com/kahlys/codex/actions/workflows/lint.yml)
-[![Tests](https://github.com/kahlys/codex/actions/workflows/ci.yml/badge.svg)](https://github.com/kahlys/codex/actions/workflows/ci.yml)
+[![Go Tests](https://github.com/kahlys/codex/actions/workflows/ci-go.yml/badge.svg)](https://github.com/kahlys/codex/actions/workflows/ci-go.yml)
+[![Rust Tests](https://github.com/kahlys/codex/actions/workflows/ci-rust.yml/badge.svg)](https://github.com/kahlys/codex/actions/workflows/ci-rust.yml)
 
 Personal collection of tools, libraries, projects, and proof-of-concepts.
 
