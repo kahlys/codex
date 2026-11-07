@@ -7,7 +7,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/kahlys/codex/go/cmd/cemetery/app"
+	"github.com/kahlys/codex/tools/go/cemetery/app"
 )
 
 func main() {

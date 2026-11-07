@@ -12,10 +12,10 @@ import (
 	"charm.land/lipgloss/v2"
 	"charm.land/lipgloss/v2/table"
 
-	"github.com/kahlys/codex/go/cmd/cemetery/api"
-	"github.com/kahlys/codex/go/cmd/cemetery/app/keys"
-	"github.com/kahlys/codex/go/cmd/cemetery/app/message"
-	"github.com/kahlys/codex/go/cmd/cemetery/app/theme"
+	"github.com/kahlys/codex/tools/go/cemetery/api"
+	"github.com/kahlys/codex/tools/go/cemetery/app/keys"
+	"github.com/kahlys/codex/tools/go/cemetery/app/message"
+	"github.com/kahlys/codex/tools/go/cemetery/app/theme"
 )
 
 // HomeModel renders and drives the products list view.

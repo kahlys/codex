@@ -6,7 +6,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/kahlys/codex/go/cmd/bazaar/model"
+	"github.com/kahlys/codex/tools/go/bazaar/model"
 )
 
 func main() {

@@ -14,8 +14,8 @@ import (
 	"charm.land/huh/v2"
 	"charm.land/lipgloss/v2"
 
-	"github.com/kahlys/codex/go/cmd/bazaar/internal/dockerx"
-	"github.com/kahlys/codex/go/cmd/bazaar/internal/teax"
+	"github.com/kahlys/codex/tools/go/bazaar/internal/dockerx"
+	"github.com/kahlys/codex/tools/go/bazaar/internal/teax"
 )
 
 // ContainersModel is the main model for managing Docker containers.

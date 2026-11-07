@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/kahlys/codex/go/pkg/psqlx"
+	"github.com/kahlys/codex/libraries/go/psqlx"
 )
 
 // ConfigDB wraps a database connection
