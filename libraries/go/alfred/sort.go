@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 	"unicode"
 )
@@ -74,7 +75,7 @@ func (flt Option) Sort(slice any) {
 			return false
 		}
 
-		return res != (flt.Order == orderDESC)
+		return res != strings.EqualFold(flt.Order, orderDESC)
 	})
 }
 
