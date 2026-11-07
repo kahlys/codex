@@ -15,18 +15,12 @@ jobs:
   rust-pipeline:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: ${{ inputs.toolchain }}
+      - uses: actions/checkout@v7
 
       - name: Run tests
         working-directory: ${{ inputs.working-directory }}
-        run: cargo test
+        run: cargo test --verbose
 
       - name: Build
         working-directory: ${{ inputs.working-directory }}
-        run: cargo build --release
+        run: cargo build --verbose
