@@ -15,8 +15,7 @@ on:
       - 'Cargo.lock'
 
 jobs:
-  call-rust-ci:
+  global-rust:
     uses: ./.github/workflows/reusable-rust.yml
     with:
-      working-directory: '.'        # Mets ton dossier (ex: '.' si c'est à la racine)
-      toolchain: 'stable'           # Ou une version spécifique (ex: '1.75.0')
+      working-directory: '.'
