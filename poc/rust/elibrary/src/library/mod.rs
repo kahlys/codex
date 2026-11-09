@@ -15,6 +15,6 @@ mod format;
 mod lookup;
 mod scan;
 
-pub use epub::{BookDetails, read_epub};
-pub use lookup::{BookRecord, CatalogueResults, search_books};
+pub use epub::{BookDetails, EpubMetadata, read_epub, write_metadata};
+pub use lookup::{CatalogueResults, search_books};
 pub use scan::collect_epubs;

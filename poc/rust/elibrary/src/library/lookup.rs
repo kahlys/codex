@@ -1,8 +1,9 @@
 //! Looking a book up in a real catalogue: the Bibliothèque nationale de France.
 //!
 //! French EPUBs are often badly tagged, so the metadata panel has a button that
-//! searches the BnF's online catalogue for the book and shows what the national
-//! library says about it: title, author, publication date and collection.
+//! searches the BnF's online catalogue for the book and replaces the metadata
+//! read from the file with what the national library says about it: title,
+//! author, publication year, and the saga the volume belongs to.
 //!
 //! The catalogue is exposed as an **SRU** service, the standard HTTP + CQL way
 //! of querying library catalogues:
@@ -46,12 +47,45 @@ pub struct BookRecord {
     pub author: Option<String>,
     /// Publication year, as the catalogue spells it (`DL 2018` -> `2018`).
     pub date: Option<String>,
-    /// The collection/series, with its volume number when there is one.
-    pub series: Option<String>,
+    /// The collection/series the volume belongs to (`461 $t`).
+    pub saga: Option<String>,
+    /// The volume number inside that collection (`461 $v`).
+    pub tome: Option<String>,
     /// Publisher name.
     pub publisher: Option<String>,
     /// ISBN, which identifies this exact edition.
     pub isbn: Option<String>,
+}
+
+impl BookRecord {
+    /// The record as the rows the details page shows once it has replaced the
+    /// metadata read from the EPUB.
+    ///
+    /// Title, author and year are always present; the saga and its tome only
+    /// appear when the catalogue names a collection, and the tome only when it
+    /// also gives a volume number.
+    pub fn metadata_rows(&self) -> Vec<(String, String)> {
+        let mut rows = vec![
+            ("Title".to_string(), self.title.clone()),
+            (
+                "Author".to_string(),
+                self.author.clone().unwrap_or_else(|| "Unknown".to_string()),
+            ),
+            (
+                "Published".to_string(),
+                self.date.clone().unwrap_or_else(|| "Unknown".to_string()),
+            ),
+        ];
+
+        if let Some(saga) = &self.saga {
+            rows.push(("Saga".to_string(), saga.clone()));
+            if let Some(tome) = &self.tome {
+                rows.push(("Tome".to_string(), tome.clone()));
+            }
+        }
+
+        rows
+    }
 }
 
 /// The answer to one search: how many records exist in total, and the first few
@@ -248,11 +282,13 @@ fn fields_of(record: roxmltree::Node) -> Vec<Field> {
 /// Turns the fields of one record into a [`BookRecord`], `None` when the record
 /// has no usable title (some catalogue entries describe only a collection).
 fn book_from(fields: &[Field]) -> Option<BookRecord> {
+    let (saga, tome) = saga_of(fields);
     Some(BookRecord {
         title: joined(fields, &["200"], &["a", "e"], " : ")?,
         author: author_of(fields),
         date: date_of(fields),
-        series: series_of(fields),
+        saga,
+        tome,
         publisher: joined(fields, &["214", "210"], &["c"], " "),
         isbn: joined(fields, &["010"], &["a"], " "),
     })
@@ -349,8 +385,9 @@ fn first_year(text: &str) -> Option<String> {
 }
 
 /// The collection a volume belongs to: `461` in current records, `410` in older
-/// ones, with the volume number added when the catalogue gives one.
-fn series_of(fields: &[Field]) -> Option<String> {
+/// ones. Returns the saga name and, when the catalogue gives one, the volume
+/// number inside it.
+fn saga_of(fields: &[Field]) -> (Option<String>, Option<String>) {
     for tag in ["461", "410"] {
         let Some(field) = fields.iter().find(|field| field.tag == tag) else {
             continue;
@@ -358,12 +395,12 @@ fn series_of(fields: &[Field]) -> Option<String> {
         let Some(name) = subfield(field, "t") else {
             continue;
         };
-        return Some(match subfield(field, "v") {
-            Some(volume) => format!("{name} · t. {volume}"),
-            None => name.to_string(),
-        });
+        return (
+            Some(name.to_string()),
+            subfield(field, "v").map(str::to_string),
+        );
     }
-    None
+    (None, None)
 }
 
 /// All text below `node`, joined, with whitespace collapsed: MARC XML puts

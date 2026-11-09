@@ -77,9 +77,11 @@
 //!
 //! The details page also carries a "Search the BnF" button. Pressing it sends
 //! the title and author to the Bibliothèque nationale de France's SRU API, on a
-//! background task like every other blocking operation, and shows the records
-//! that come back (real title, author, publication date and collection) under
-//! the metadata read from the file.
+//! background task like every other blocking operation. The best record it
+//! returns replaces the metadata read from the file (title, author, publication
+//! year, and the saga and tome when the volume belongs to one), and the same
+//! values are written back into the EPUB's package document, so the book on
+//! disk keeps them.
 
 mod app;
 mod library;

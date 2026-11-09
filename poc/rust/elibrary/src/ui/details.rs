@@ -9,9 +9,9 @@ use gpui::{
     prelude::*, px, rgb,
 };
 
-use crate::app::{DetailsState, EpubBrowser, LookupState};
-use crate::library::{BookDetails, BookRecord, CatalogueResults};
-use crate::ui::components::{detail_row, detail_section};
+use crate::app::{DetailsState, EpubBrowser, LookupState, SaveState};
+use crate::library::{BookDetails, CatalogueResults};
+use crate::ui::components::detail_section;
 use crate::ui::theme;
 
 /// Builds the right-hand panel for whichever book is selected.
@@ -39,9 +39,9 @@ pub fn panel(app: &EpubBrowser, cx: &mut Context<EpubBrowser>) -> AnyElement {
         .gap_3()
         // Header stays put, `body` scrolls.
         .child(header(&selection.path, &selection.state, cx))
-        .child(body)
-        .into_any_element()
+        .child(body)        .into_any_element()
 }
+
 
 /// The panel before a book has been clicked.
 fn placeholder() -> AnyElement {
@@ -54,9 +54,9 @@ fn placeholder() -> AnyElement {
         .px_4()
         .text_size(px(13.0))
         .text_color(rgb(theme::TEXT_FAINT))
-        .child("Select a book on the left to see its metadata.")
-        .into_any_element()
+        .child("Select a book on the left to see its metadata.")        .into_any_element()
 }
+
 
 /// The path of the selected file, the catalogue button, and the button that
 /// empties the panel.
@@ -104,9 +104,9 @@ fn close_button(cx: &mut Context<EpubBrowser>) -> AnyElement {
                 .text_color(rgb(theme::TEXT_MUTED))
                 .child("×"),
         )
-        .on_click(cx.listener(EpubBrowser::clear_selection))
-        .into_any_element()
+        .on_click(cx.listener(EpubBrowser::clear_selection))        .into_any_element()
 }
+
 
 /// The panel while the archive is still being read.
 fn loading() -> AnyElement {
@@ -118,9 +118,9 @@ fn loading() -> AnyElement {
         .justify_center()
         .text_size(px(13.0))
         .text_color(rgb(theme::TEXT_MUTED))
-        .child("Reading metadata…")
-        .into_any_element()
+        .child("Reading metadata…")        .into_any_element()
 }
+
 
 /// The panel when the file could not be read; the message is shown verbatim.
 fn failed(error: &str) -> AnyElement {
@@ -144,9 +144,9 @@ fn failed(error: &str) -> AnyElement {
                 .text_size(px(11.0))
                 .text_color(rgb(theme::TEXT_FAINT))
                 .child("Pick another book from the list."),
-        )
-        .into_any_element()
+        )        .into_any_element()
 }
+
 
 /// The panel once the metadata has been parsed.
 fn ready(app: &EpubBrowser, details: &BookDetails) -> AnyElement {
@@ -183,16 +183,17 @@ fn ready(app: &EpubBrowser, details: &BookDetails) -> AnyElement {
                 ),
         )
         // ---- The full metadata table ----------------------
-        // `detail_section` prints a placeholder when it is empty.
+        // Once the catalogue has answered, these are its rows instead of the
+        // file's. `detail_section` prints a placeholder when it is empty.
         .child(detail_section("Metadata", &details.entries))
         // ---- What the catalogue says, once the button was pressed ----
         // `children` takes an iterator; `Option` is one, so an "idle" lookup
         // contributes nothing to the panel at all.
         .children(lookup_section(app))
         // ---- Facts about the file on disk -----------------
-        .child(detail_section("File", &details.file))
-        .into_any_element()
+        .child(detail_section("File", &details.file))        .into_any_element()
 }
+
 
 /// The accent-coloured button that starts the catalogue search.
 fn search_button(cx: &mut Context<EpubBrowser>) -> AnyElement {
@@ -210,12 +211,13 @@ fn search_button(cx: &mut Context<EpubBrowser>) -> AnyElement {
                 .text_color(rgb(theme::ON_ACCENT))
                 .child("Search the BnF"),
         )
-        .on_click(cx.listener(EpubBrowser::lookup_book))
-        .into_any_element()
+        .on_click(cx.listener(EpubBrowser::lookup_book))        .into_any_element()
 }
 
-/// The catalogue block below the EPUB metadata: nothing while idle, a note
-/// while searching, an error when the request failed, or the matching books.
+
+/// The catalogue block below the metadata: nothing while idle, a note while
+/// searching, an error when the request failed, or confirmation that the
+/// metadata now comes from the catalogue.
 fn lookup_section(app: &EpubBrowser) -> Option<AnyElement> {
     match &app.lookup {
         LookupState::Idle => None,
@@ -230,7 +232,36 @@ fn lookup_section(app: &EpubBrowser) -> Option<AnyElement> {
             theme::TEXT_MUTED,
             theme::TEXT_FAINT,
         )),
-        LookupState::Ready(results) => Some(results_section(results)),
+        LookupState::Ready(results) => {
+            let (message, color) = replaced_message(results, &app.save);
+            Some(note(&message, color, theme::TEXT_FAINT))
+        }
+    }
+}
+
+/// The confirmation under the replaced metadata: where the values came from,
+/// and what happened when they were written back into the EPUB.
+fn replaced_message(results: &CatalogueResults, save: &SaveState) -> (String, u32) {
+    // The first record is already applied; saying how many matched explains
+    // why the values may not be the only ones the catalogue knows.
+    let source = if results.total > 1 {
+        format!(
+            "Metadata replaced from the BnF catalogue ({} matches, the first one was used).",
+            results.total
+        )
+    } else {
+        "Metadata replaced from the BnF catalogue.".to_string()
+    };
+
+    match save {
+        SaveState::Idle | SaveState::Writing => {
+            (format!("{source} Writing it into the file…"), theme::TEXT_MUTED)
+        }
+        SaveState::Saved => (format!("{source} It was saved in the file."), theme::TEXT_MUTED),
+        SaveState::Failed(error) => (
+            format!("{source} It could not be written into the file: {error}."),
+            theme::DANGER,
+        ),
     }
 }
 
@@ -250,68 +281,8 @@ fn note(message: &str, color: u32, hint_color: u32) -> AnyElement {
                 .text_size(px(11.0))
                 .text_color(rgb(hint_color))
                 .child("Bibliothèque nationale de France · catalogue.bnf.fr"),
-        )
-        .into_any_element()
+        )        .into_any_element()
 }
 
-/// The heading that says how many records matched, then one card per book.
-fn results_section(results: &CatalogueResults) -> AnyElement {
-    let shown = results.books.len();
-    let heading = if results.total as usize > shown {
-        format!("BnF catalogue · {} matches, first {shown} shown", results.total)
-    } else {
-        format!("BnF catalogue · {shown} match(es)")
-    };
 
-    div()
-        .w_full()
-        .flex()
-        .flex_col()
-        .gap_2()
-        .child(
-            div()
-                .text_size(px(11.0))
-                .text_color(rgb(theme::ACCENT))
-                .child(heading.to_uppercase()),
-        )
-        .children(results.books.iter().map(book_card))
-        .into_any_element()
-}
 
-/// One catalogue record: its title as the headline, then the fields that tell
-/// the user whether this is the right book.
-fn book_card(book: &BookRecord) -> AnyElement {
-    let mut rows: Vec<(String, String)> = Vec::with_capacity(5);
-    rows.push((
-        "Author".to_string(),
-        book.author.clone().unwrap_or_else(|| "Unknown".to_string()),
-    ));
-    rows.push((
-        "Published".to_string(),
-        book.date.clone().unwrap_or_else(|| "Unknown".to_string()),
-    ));
-    // Always shown, so an empty saga is visible as the catalogue having none
-    // rather than as the app forgetting to ask for it.
-    rows.push((
-        "Saga".to_string(),
-        book.series.clone().unwrap_or_else(|| "—".to_string()),
-    ));
-    if let Some(publisher) = &book.publisher {
-        rows.push(("Publisher".to_string(), publisher.clone()));
-    }
-    if let Some(isbn) = &book.isbn {
-        rows.push(("ISBN".to_string(), isbn.clone()));
-    }
-
-    div()
-        .w_full()
-        .flex()
-        .flex_col()
-        .gap_2()
-        .p_3()
-        .rounded_md()
-        .bg(rgb(theme::SURFACE_HOVER))
-        .child(div().text_size(px(15.0)).child(book.title.clone()))
-        .children(rows.iter().map(|(label, value)| detail_row(label, value)))
-        .into_any_element()
-}

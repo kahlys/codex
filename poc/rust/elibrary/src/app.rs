@@ -23,7 +23,10 @@ use gpui::{
     prelude::*, rgb,
 };
 
-use crate::library::{BookDetails, CatalogueResults, collect_epubs, read_epub, search_books};
+use crate::library::{
+    BookDetails, CatalogueResults, EpubMetadata, collect_epubs, read_epub, search_books,
+    write_metadata,
+};
 use crate::ui::{list, theme};
 
 /// The book selected in the list, plus the progress of reading it.
@@ -61,9 +64,28 @@ pub enum LookupState {
     Idle,
     /// The request is in flight.
     Loading,
-    /// What the Bibliothèque nationale de France knows about this book.
+    /// What the Bibliothèque nationale de France knows about this book; its
+    /// first record is the one already applied to the panel.
     Ready(CatalogueResults),
     /// The request failed; the message is shown verbatim.
+    Failed(String),
+}
+
+/// Phase of writing the catalogue metadata back into the EPUB file.
+///
+/// It is separate from [`LookupState`] because the file can fail to be written
+/// long after the catalogue answered, and the panel says which of the two
+/// happened.
+#[derive(Default)]
+pub enum SaveState {
+    /// Nothing has been written for the selected book.
+    #[default]
+    Idle,
+    /// The archive is being rebuilt and swapped in.
+    Writing,
+    /// The file now carries the catalogue metadata.
+    Saved,
+    /// The write failed; the message is shown verbatim.
     Failed(String),
 }
 
@@ -99,6 +121,8 @@ pub struct EpubBrowser {
     pub(crate) selected: Option<Selection>,
     /// Status of the BnF catalogue search for the selected book.
     pub(crate) lookup: LookupState,
+    /// Status of writing that answer into the EPUB file itself.
+    pub(crate) save: SaveState,
 }
 
 impl EpubBrowser {
@@ -115,6 +139,7 @@ impl EpubBrowser {
             details_scroll: ScrollHandle::new(),
             selected: None,
             lookup: LookupState::Idle,
+            save: SaveState::Idle,
         }
     }
 
@@ -174,6 +199,7 @@ impl EpubBrowser {
                 this.epubs.clear();
                 this.selected = None;
                 this.lookup = LookupState::Idle;
+                this.save = SaveState::Idle;
                 // Drop the previous scroll offset: it belongs to the old list.
                 this.scroll_handle = ScrollHandle::new();
                 this.scanning = true;
@@ -215,6 +241,7 @@ impl EpubBrowser {
         self.details_scroll = ScrollHandle::new();
         // The previous book's catalogue answer does not apply to this one.
         self.lookup = LookupState::Idle;
+        self.save = SaveState::Idle;
         self.selected = Some(Selection {
             path: path.clone(),
             state: DetailsState::Loading,
@@ -273,6 +300,7 @@ impl EpubBrowser {
         self.selected = None;
         // The catalogue answer belongs to the panel being emptied.
         self.lookup = LookupState::Idle;
+        self.save = SaveState::Idle;
         // THE key line: without `notify` the state changes but the screen keeps
         // showing the old frame.
         cx.notify();
@@ -285,6 +313,12 @@ impl EpubBrowser {
     /// on the background executor, then fill the panel in on the main thread.
     /// The title and author come from the EPUB metadata that is already
     /// displayed; the file name is used when the file advertises no title.
+    ///
+    /// When the catalogue answers, the best match replaces the file's metadata
+    /// outright: its title, author, year and saga become the rows of the
+    /// panel, and everything the EPUB claimed is dropped. The same values are
+    /// then written into the EPUB itself on another background task, because
+    /// the panel and the file must not disagree.
     pub(crate) fn lookup_book(
         &mut self,
         _event: &ClickEvent,
@@ -305,25 +339,95 @@ impl EpubBrowser {
         };
 
         self.lookup = LookupState::Loading;
+        self.save = SaveState::Idle;
         cx.notify();
 
         let task = cx.background_spawn(async move { search_books(&title, author.as_deref(), 5) });
 
         cx.spawn(async move |this, cx| {
             let outcome = task.await;
+
+            // First the panel: apply the best match and remember what should go
+            // into the file, if anything.
+            let pending = this
+                .update(cx, |this, cx| {
+                    // Only fill in the panel if it still shows this book: the
+                    // user may have selected another one (or closed the panel)
+                    // meanwhile.
+                    let still_selected = this
+                        .selected
+                        .as_ref()
+                        .is_some_and(|selection| selection.path == path);
+                    if !still_selected {
+                        return None;
+                    }
+
+                    let to_write = match outcome {
+                        Ok(results) => {
+                            // `books` is sorted best-match first, so the first
+                            // record is the one whose metadata replaces the
+                            // file's own. An empty answer leaves the panel as
+                            // the EPUB described it.
+                            let best = results.books.first();
+                            if let Some(record) = best
+                                && let Some(Selection {
+                                    state: DetailsState::Ready(details),
+                                    ..
+                                }) = this.selected.as_mut()
+                            {
+                                details.title = record.title.clone();
+                                details.creator = record.author.clone();
+                                details.entries = record.metadata_rows();
+                            }
+                            let to_write = best.map(|record| EpubMetadata {
+                                title: record.title.clone(),
+                                author: record.author.clone(),
+                                published: record.date.clone(),
+                                saga: record.saga.clone(),
+                                tome: record.tome.clone(),
+                            });
+                            this.lookup = LookupState::Ready(results);
+                            to_write
+                        }
+                        Err(error) => {
+                            this.lookup = LookupState::Failed(format!(
+                                "Could not search the BnF catalogue: {error}."
+                            ));
+                            None
+                        }
+                    };
+
+                    this.save = if to_write.is_some() {
+                        SaveState::Writing
+                    } else {
+                        SaveState::Idle
+                    };
+                    cx.notify();
+                    to_write
+                })
+                .ok()
+                .flatten();
+
+            let Some(metadata) = pending else {
+                return;
+            };
+
+            // Then the file: rewriting the whole archive is blocking IO, so it
+            // goes to the background executor like the search did.
+            let save_path = path.clone();
+            let still_wanted = save_path.clone();
+            let write = cx.background_spawn(async move { write_metadata(&save_path, &metadata) });
+            let result = write.await;
+
             this.update(cx, |this, cx| {
-                // Only fill in the panel if it still shows this book: the user
-                // may have selected another one (or closed the panel) meanwhile.
                 let still_selected = this
                     .selected
                     .as_ref()
-                    .is_some_and(|selection| selection.path == path);
+                    .is_some_and(|selection| selection.path == still_wanted);
                 if still_selected {
-                    this.lookup = match outcome {
-                        Ok(results) => LookupState::Ready(results),
-                        Err(error) => LookupState::Failed(format!(
-                            "Could not search the BnF catalogue: {error}."
-                        )),
+                    this.save = match result {
+                        Ok(()) => SaveState::Saved,
+                        Err(error) => SaveState::Failed(error),
                     };
                     cx.notify();
                 }

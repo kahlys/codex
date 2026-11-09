@@ -11,15 +11,31 @@
 //! `rootfile@full-path` attribute to the OPF, then walk its metadata elements.
 //! Everything here is blocking file IO and must run off the UI thread.
 //!
+//! Writing is the same trip in reverse: the OPF is patched as text (so the
+//! prefixes, identifiers, language and cover pointers already in it survive),
+//! the whole ZIP is rebuilt next to the book, and that copy then replaces the
+//! original file.
+//!
 //! `zip` reads the container, `roxmltree` turns the XML documents into a small
 //! read-only tree we can walk (much easier, and safer, than matching tags by
 //! hand).
 
-use std::io::{Read, Seek};
-use std::path::Path;
+use std::io::{Read, Seek, Write};
+use std::ops::Range;
+use std::path::{Path, PathBuf};
 
-use roxmltree::Document;
-use zip::ZipArchive;
+use roxmltree::{Document, Node};
+use zip::write::{SimpleFileOptions, ZipWriter};
+use zip::{CompressionMethod, ZipArchive};
+
+/// Namespace of the Dublin Core descriptive fields (`dc:title`, `dc:creator`,
+/// `dc:date`...).
+const DC_NAMESPACE: &str = "http://purl.org/dc/elements/1.1/";
+/// Namespace of the package document's own elements, `<meta>` included.
+const OPF_NAMESPACE: &str = "http://www.idpf.org/2007/opf";
+/// Id given to the `belongs-to-collection` entry this app writes, so its two
+/// refinements can point at it.
+const SAGA_ID: &str = "elibrary-saga";
 
 use super::format::{format_utc, human_size};
 
@@ -45,15 +61,7 @@ pub fn read_epub(path: &Path) -> Result<BookDetails, String> {
     let mut archive = ZipArchive::new(file)
         .map_err(|error| format!("it is not a valid ZIP archive ({error})"))?;
 
-    // The container always lives at this exact path.
-    let container = read_entry(&mut archive, "META-INF/container.xml")
-        .ok_or_else(|| "it has no META-INF/container.xml entry".to_string())?;
-
-    // Normally container.xml tells us where the package document is. For files
-    // that omit it, fall back to any `.opf` in the archive.
-    let package = package_path(&container)
-        .or_else(|| find_package_document(&mut archive))
-        .ok_or_else(|| "it does not name a package (.opf) document".to_string())?;
+    let package = package_document(&mut archive)?;
 
     let package_xml = read_entry(&mut archive, &package)
         .ok_or_else(|| format!("its package document ({package}) could not be read"))?;
@@ -109,6 +117,18 @@ fn try_read_entry<R: Read + Seek>(archive: &mut ZipArchive<R>, name: &str) -> Op
     let mut bytes = Vec::new();
     entry.read_to_end(&mut bytes).ok()?;
     Some(String::from_utf8_lossy(&bytes).into_owned())
+}
+
+/// Finds the package document of an opened archive.
+///
+/// The container at `META-INF/container.xml` always lives at that exact path
+/// and names the package; for files that omit it, any `.opf` will do.
+fn package_document<R: Read + Seek>(archive: &mut ZipArchive<R>) -> Result<String, String> {
+    let container = read_entry(archive, "META-INF/container.xml")
+        .ok_or_else(|| "it has no META-INF/container.xml entry".to_string())?;
+    package_path(&container)
+        .or_else(|| find_package_document(archive))
+        .ok_or_else(|| "it does not name a package (.opf) document".to_string())
 }
 
 /// Extracts the package document path from `META-INF/container.xml`.
@@ -292,4 +312,328 @@ fn file_facts(path: &Path) -> Vec<(String, String)> {
     }
 
     facts
+}
+
+/// The metadata that replaces an EPUB's own: what the details page shows and
+/// what [`write_metadata`] puts into the package document.
+///
+/// The saga and its tome are a pair: a volume number only makes sense when the
+/// book belongs to a collection.
+pub struct EpubMetadata {
+    /// Book title.
+    pub title: String,
+    /// Author, when one is known.
+    pub author: Option<String>,
+    /// Publication year.
+    pub published: Option<String>,
+    /// The collection the volume belongs to.
+    pub saga: Option<String>,
+    /// The volume number inside that collection.
+    pub tome: Option<String>,
+}
+
+/// Rewrites the descriptive metadata of the EPUB at `path`.
+///
+/// Everything else in the file is copied through untouched: the identifiers,
+/// language, cover pointer and reading order are not ours to judge. The new
+/// archive is built next to the book and only then renamed over it, so a
+/// failure leaves the original readable.
+///
+/// Errors are lowercase clauses meant to complete the sentence "Could not
+/// update this EPUB: ...".
+pub fn write_metadata(path: &Path, metadata: &EpubMetadata) -> Result<(), String> {
+    let mut archive = ZipArchive::new(
+        std::fs::File::open(path)
+            .map_err(|error| format!("the file could not be opened ({error})"))?,
+    )
+    .map_err(|error| format!("it is not a valid ZIP archive ({error})"))?;
+
+    let package = package_document(&mut archive)?;
+    let package_xml = read_entry(&mut archive, &package)
+        .ok_or_else(|| format!("its package document ({package}) could not be read"))?;
+    let patched = patch_metadata(&package_xml, metadata)?;
+
+    let temp = temp_path(path);
+    if let Err(error) = rebuild_archive(&mut archive, &package, patched.as_bytes(), &temp) {
+        // Never leave a half-written archive behind.
+        let _ = std::fs::remove_file(&temp);
+        return Err(error);
+    }
+
+    // Close the original before swapping the files: Windows is happier when
+    // nothing holds the file we are replacing.
+    drop(archive);
+
+    std::fs::rename(&temp, path).map_err(|error| {
+        let _ = std::fs::remove_file(&temp);
+        format!("the rewritten copy could not replace the original ({error})")
+    })
+}
+
+/// The package document with its `<metadata>` block rewritten.
+///
+/// Editing the text instead of generating a new block keeps everything we were
+/// not asked to change: element prefixes, identifiers, language, the cover
+/// pointer, and even the Dublin Core attributes (`opf:role`, `xml:lang`...).
+fn patch_metadata(xml: &str, metadata: &EpubMetadata) -> Result<String, String> {
+    let document = Document::parse(xml)
+        .map_err(|error| format!("its package document is not valid XML ({error})"))?;
+
+    let block = document
+        .descendants()
+        .find(|node| node.is_element() && node.tag_name().name() == "metadata")
+        .ok_or_else(|| "its package document has no <metadata> block".to_string())?;
+
+    let mut edits: Vec<(Range<usize>, String)> = Vec::new();
+    // Elements the file does not have yet; they are added at the end of the
+    // block, so the original formatting stays where it is.
+    let mut added: Vec<String> = Vec::new();
+
+    // Title, author and year: the first element of each kind is rewritten in
+    // place and any duplicate is dropped, so the file keeps exactly one.
+    for (local, value) in [
+        ("title", Some(metadata.title.as_str())),
+        ("creator", metadata.author.as_deref()),
+        ("date", metadata.published.as_deref()),
+    ] {
+        let found = dc_elements(block, local);
+        match (found.first(), value) {
+            (Some(first), Some(value)) => {
+                edits.push(text_edit(xml, *first, value));
+                edits.extend(found[1..].iter().map(|node| (node.range(), String::new())));
+            }
+            // Without a new value the old one has to go: the catalogue did not
+            // confirm it, and the whole point is to erase what was there.
+            (Some(_), None) => {
+                edits.extend(found.iter().map(|node| (node.range(), String::new())));
+            }
+            (None, Some(value)) => added.push(new_dc_element(local, value)),
+            (None, None) => {}
+        }
+    }
+
+    // A saga is an EPUB 3 `belongs-to-collection` meta plus refinements saying
+    // it is a series and which volume this is. Previous collection claims are
+    // dropped, including the metas that refine them.
+    let collection_ids: Vec<String> = block
+        .children()
+        .filter(|node| {
+            is_meta(node) && node.attribute("property") == Some("belongs-to-collection")
+        })
+        .filter_map(|node| node.attribute("id").map(str::to_string))
+        .collect();
+
+    for node in block.children().filter(is_meta) {
+        let property = node.attribute("property").unwrap_or_default();
+        let refines = node.attribute("refines").unwrap_or_default();
+        let is_collection = matches!(property, "belongs-to-collection" | "collection-type" | "group-position");
+        let refines_collection = collection_ids
+            .iter()
+            .any(|id| refines.strip_prefix('#') == Some(id.as_str()));
+        if is_collection || refines_collection {
+            edits.push((node.range(), String::new()));
+        }
+    }
+
+    if let Some(saga) = &metadata.saga {
+        added.push(format!(
+            "<meta xmlns=\"{OPF_NAMESPACE}\" property=\"belongs-to-collection\" id=\"{SAGA_ID}\">{}</meta>",
+            escape_xml(saga)
+        ));
+        added.push(format!(
+            "<meta xmlns=\"{OPF_NAMESPACE}\" refines=\"#{SAGA_ID}\" property=\"collection-type\">series</meta>"
+        ));
+        if let Some(tome) = &metadata.tome {
+            added.push(format!(
+                "<meta xmlns=\"{OPF_NAMESPACE}\" refines=\"#{SAGA_ID}\" property=\"group-position\">{}</meta>",
+                escape_xml(tome)
+            ));
+        }
+    }
+
+    if !added.is_empty() {
+        let span = content_span(xml, block)
+            .ok_or_else(|| "its <metadata> block is written in a form this app cannot rewrite".to_string())?;
+        edits.push((
+            span.end..span.end,
+            format!("\n    {}\n  ", added.join("\n    ")),
+        ));
+    }
+
+    // Apply from the end so the offsets of earlier edits stay valid. Sorting is
+    // stable and ties are impossible: no edit starts where another begins.
+    edits.sort_by_key(|(range, _)| std::cmp::Reverse(range.start));
+    let mut patched = xml.to_string();
+    for (range, text) in edits {
+        patched.replace_range(range, &text);
+    }
+
+    // A file whose XML no longer parses is worse than an unchanged one, so this
+    // is checked before anything is written to disk.
+    Document::parse(&patched)
+        .map_err(|error| format!("its rewritten package document is not valid XML ({error})"))?;
+    Ok(patched)
+}
+
+/// Elements of the `<metadata>` block in the Dublin Core namespace with the
+/// given local name (`title`, `creator`, `date`...).
+fn dc_elements<'a, 'input: 'a>(block: Node<'a, 'input>, local: &str) -> Vec<Node<'a, 'input>> {
+    block
+        .children()
+        .filter(|node| {
+            node.is_element()
+                && node.tag_name().name() == local
+                && node.tag_name().namespace() == Some(DC_NAMESPACE)
+        })
+        .collect()
+}
+
+/// Whether `node` is a `<meta>` element, whatever prefix the file gives it.
+fn is_meta(node: &Node) -> bool {
+    node.is_element() && node.tag_name().name() == "meta"
+}
+
+/// The edit that puts `value` inside `node` as its only text.
+///
+/// A normal element only has its content replaced, so attributes stay. A
+/// self-closing one (`<dc:title/>`) has no content to replace, so the whole
+/// tag is rebuilt, including the prefix the file chose for it.
+fn text_edit(xml: &str, node: Node, value: &str) -> (Range<usize>, String) {
+    let escaped = escape_xml(value);
+    match content_span(xml, node) {
+        Some(span) => (span, escaped),
+        None => {
+            let name = qname(xml, node);
+            (node.range(), format!("<{name}>{escaped}</{name}>"))
+        }
+    }
+}
+
+/// The byte range between an element's opening and closing tags.
+///
+/// `None` when the element closes itself: it has no "inside", so the caller
+/// has to rebuild the tag instead of filling it.
+fn content_span(xml: &str, node: Node) -> Option<Range<usize>> {
+    let range = node.range();
+    let open_end = open_tag_end(xml, range.start)?;
+    // `<dc:title/>` or `<dc:title />`: the tag ends with a slash.
+    if xml[range.start..open_end]
+        .trim_end_matches('>')
+        .trim_end()
+        .ends_with('/')
+    {
+        return None;
+    }
+    let close_start = xml[open_end..range.end].rfind('<')? + open_end;
+    Some(open_end..close_start)
+}
+
+/// Index just past the `>` that closes the tag starting at `start`, skipping a
+/// `>` that appears inside a quoted attribute value.
+fn open_tag_end(xml: &str, start: usize) -> Option<usize> {
+    let mut quote: Option<u8> = None;
+    for (offset, byte) in xml.as_bytes()[start..].iter().copied().enumerate() {
+        match byte {
+            b'"' | b'\'' if quote.is_none() => quote = Some(byte),
+            b'"' | b'\'' if quote == Some(byte) => quote = None,
+            b'>' if quote.is_none() => return Some(start + offset + 1),
+            _ => {}
+        }
+    }
+    None
+}
+
+/// The qualified name of an element as the file writes it (`dc:title`).
+fn qname(xml: &str, node: Node) -> String {
+    let start = node.range().start + 1;
+    let rest = &xml[start..node.range().end];
+    let length = rest
+        .find(|character: char| character.is_whitespace() || character == '/' || character == '>')
+        .unwrap_or(rest.len());
+    rest[..length].to_string()
+}
+
+/// A Dublin Core element for a file that has none yet. It declares the `dc`
+/// prefix on itself, so it does not matter what prefixes the package uses.
+fn new_dc_element(local: &str, value: &str) -> String {
+    format!(
+        "<dc:{local} xmlns:dc=\"{DC_NAMESPACE}\">{}</dc:{local}>",
+        escape_xml(value)
+    )
+}
+
+/// Escapes the characters that may not appear as plain text in XML.
+fn escape_xml(text: &str) -> String {
+    text.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+}
+
+/// A sibling path for the rewritten archive: the final rename stays on the same
+/// filesystem, which is what makes it atomic.
+fn temp_path(path: &Path) -> PathBuf {
+    let mut name = path.file_name().unwrap_or_default().to_os_string();
+    name.push(".elibrary-tmp");
+    path.with_file_name(name)
+}
+
+/// Copies every entry of `archive` into a new ZIP at `target`, replacing the
+/// package document with `package_xml`.
+///
+/// Entries keep their order and compression, so the `mimetype` entry stays
+/// first and uncompressed as the EPUB format requires.
+fn rebuild_archive<R: Read + Seek>(
+    archive: &mut ZipArchive<R>,
+    package: &str,
+    package_xml: &[u8],
+    target: &Path,
+) -> Result<(), String> {
+    let file = std::fs::File::create(target)
+        .map_err(|error| format!("the rewritten copy could not be created ({error})"))?;
+    let mut writer = ZipWriter::new(file);
+
+    let count = archive.len();
+    for index in 0..count {
+        let mut entry = archive
+            .by_index(index)
+            .map_err(|error| format!("one of its entries could not be read ({error})"))?;
+        let name = entry
+            .name()
+            .map_err(|error| format!("one of its entries could not be read ({error})"))?
+            .to_string();
+        let compression = match entry.compression() {
+            CompressionMethod::Stored => CompressionMethod::Stored,
+            _ => CompressionMethod::Deflated,
+        };
+        let mut bytes = Vec::new();
+        entry
+            .read_to_end(&mut bytes)
+            .map_err(|error| format!("one of its entries could not be read ({error})"))?;
+        drop(entry);
+
+        let options = SimpleFileOptions::default().compression_method(compression);
+        if name.ends_with('/') {
+            writer
+                .add_directory(name, options)
+                .map_err(|error| format!("the rewritten copy could not be written ({error})"))?;
+            continue;
+        }
+
+        let data = if name == package {
+            package_xml
+        } else {
+            bytes.as_slice()
+        };
+        writer
+            .start_file(name, options)
+            .map_err(|error| format!("the rewritten copy could not be written ({error})"))?;
+        writer
+            .write_all(data)
+            .map_err(|error| format!("the rewritten copy could not be written ({error})"))?;
+    }
+
+    writer
+        .finish()
+        .map_err(|error| format!("the rewritten copy could not be completed ({error})"))?;
+    Ok(())
 }
