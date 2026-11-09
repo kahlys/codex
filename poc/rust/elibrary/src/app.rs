@@ -3,8 +3,9 @@
 //! This is the "controller" layer, and it has two jobs only:
 //!
 //! * hold [`EpubBrowser`] — every field the window needs to draw a frame, plus
-//!   which page is current;
-//! * react to the user — pick a folder, open a file, go back, step the counter.
+//!   which book the right-hand panel is showing;
+//! * react to the user — pick a folder, select a book, look it up in the BnF
+//!   catalogue, close the panel, step the counter.
 //!
 //! Notice what is *not* here: no element building (that is [`crate::ui`]) and no
 //! file-system or ZIP code (that is [`crate::library`]). The handlers orchestrate
@@ -22,29 +23,47 @@ use gpui::{
     prelude::*, rgb,
 };
 
-use crate::library::{BookDetails, collect_epubs, read_epub};
-use crate::ui::{details, list, theme};
+use crate::library::{BookDetails, CatalogueResults, collect_epubs, read_epub, search_books};
+use crate::ui::{list, theme};
 
-/// Which page the single window is showing.
+/// The book selected in the list, plus the progress of reading it.
 ///
-/// There is no navigation stack: this app only ever has two pages, so an enum
-/// with the current one is enough. Switching pages is a plain assignment plus
-/// `cx.notify()`.
-pub enum Screen {
-    /// The search bar plus the list of `.epub` files.
-    List,
-    /// The metadata page for one file. `state` tracks the three phases of
-    /// reading it: still reading, parsed, or failed.
-    Details { path: PathBuf, state: DetailsState },
+/// The window is one screen with two columns, so "which book is selected" is
+/// the only navigation state there is: `None` means the right-hand panel still
+/// shows its placeholder.
+pub struct Selection {
+    /// The `.epub` file the right-hand panel is about.
+    pub path: PathBuf,
+    /// How far reading it has got: still reading, parsed, or failed.
+    pub state: DetailsState,
 }
 
-/// Phase of the metadata read shown on the details page.
+/// Phase of the metadata read shown in the right-hand panel.
 pub enum DetailsState {
     /// The background task is still opening the archive / parsing the XML.
     Loading,
     /// Everything the file advertised, ready to display.
     Ready(BookDetails),
     /// Something went wrong; the message is shown verbatim.
+    Failed(String),
+}
+
+/// Phase of the optional BnF catalogue lookup, which the user starts by hand.
+///
+/// It is separate from [`DetailsState`] because the two are independent: the
+/// file's own metadata is read automatically, while the catalogue search only
+/// happens when the button is clicked, and its answer can fail on its own
+/// (no network, unknown book...).
+#[derive(Default)]
+pub enum LookupState {
+    /// The button has not been pressed for this file yet.
+    #[default]
+    Idle,
+    /// The request is in flight.
+    Loading,
+    /// What the Bibliothèque nationale de France knows about this book.
+    Ready(CatalogueResults),
+    /// The request failed; the message is shown verbatim.
     Failed(String),
 }
 
@@ -73,11 +92,13 @@ pub struct EpubBrowser {
     /// Scroll offset of the results list. It must live on the view: a
     /// `ScrollHandle` built inside `render` would reset on every frame.
     pub(crate) scroll_handle: ScrollHandle,
-    /// Scroll offset of the details page. Separate from `scroll_handle` so the
-    /// list keeps its position while the user is on the details page.
+    /// Scroll offset of the metadata panel. Separate from `scroll_handle`, so
+    /// scrolling the metadata never moves the list.
     pub(crate) details_scroll: ScrollHandle,
-    /// Which page is on screen. Read in `render` to pick the layout.
-    screen: Screen,
+    /// The book shown in the right-hand panel; `None` until a row is clicked.
+    pub(crate) selected: Option<Selection>,
+    /// Status of the BnF catalogue search for the selected book.
+    pub(crate) lookup: LookupState,
 }
 
 impl EpubBrowser {
@@ -92,7 +113,8 @@ impl EpubBrowser {
             scanning: false,
             scroll_handle: ScrollHandle::new(),
             details_scroll: ScrollHandle::new(),
-            screen: Screen::List,
+            selected: None,
+            lookup: LookupState::Idle,
         }
     }
 
@@ -145,12 +167,13 @@ impl EpubBrowser {
 
             // A tiny state change, then `notify` so the list clears and the
             // status line immediately shows that work is happening. Picking a
-            // new folder also leaves the details page, if it was open: its file
-            // may no longer be in the new list.
+            // new folder also empties the panel: the selected file may no
+            // longer be in the new list.
             this.update(cx, |this, cx| {
                 this.folder = Some(folder.clone());
                 this.epubs.clear();
-                this.screen = Screen::List;
+                this.selected = None;
+                this.lookup = LookupState::Idle;
                 // Drop the previous scroll offset: it belongs to the old list.
                 this.scroll_handle = ScrollHandle::new();
                 this.scanning = true;
@@ -181,20 +204,22 @@ impl EpubBrowser {
         .detach();
     }
 
-    /// Switches to the details page for `path` and starts reading its metadata.
+    /// Selects `path` and starts reading its metadata into the right-hand panel.
     ///
     /// The archive is opened on the background executor because it touches the
-    /// disk, and parsing XML is not free either. The page appears immediately in
-    /// its `Loading` state, then the same weak-entity pattern as
+    /// disk, and parsing XML is not free either. The panel appears immediately
+    /// in its `Loading` state, then the same weak-entity pattern as
     /// [`Self::pick_folder`] fills it in.
-    pub(crate) fn open_epub(&mut self, path: PathBuf, cx: &mut Context<Self>) {
-        // A fresh handle per file, so every epub starts at the top.
+    pub(crate) fn select_epub(&mut self, path: PathBuf, cx: &mut Context<Self>) {
+        // A fresh handle per book, so every one starts at the top.
         self.details_scroll = ScrollHandle::new();
-        self.screen = Screen::Details {
+        // The previous book's catalogue answer does not apply to this one.
+        self.lookup = LookupState::Idle;
+        self.selected = Some(Selection {
             path: path.clone(),
             state: DetailsState::Loading,
-        };
-        // Show the loading page before the read finishes.
+        });
+        // Show the loading panel before the read finishes.
         cx.notify();
 
         let read_path = path.clone();
@@ -203,20 +228,20 @@ impl EpubBrowser {
         cx.spawn(async move |this, cx| {
             let result = task.await;
             this.update(cx, |this, cx| {
-                // Only fill in the page if it still shows this file: the user
-                // may have pressed "back" (or opened another file) meanwhile.
-                let shows_path = matches!(
-                    &this.screen,
-                    Screen::Details { path: shown, .. } if *shown == path
-                );
-                if shows_path {
+                // Only fill in the panel if it still shows this file: the user
+                // may have selected another book (or closed the panel) meanwhile.
+                let still_selected = this
+                    .selected
+                    .as_ref()
+                    .is_some_and(|selection| selection.path == path);
+                if still_selected {
                     let state = match result {
                         Ok(details) => DetailsState::Ready(details),
                         Err(error) => {
                             DetailsState::Failed(format!("Could not read this EPUB: {error}."))
                         }
                     };
-                    this.screen = Screen::Details { path, state };
+                    this.selected = Some(Selection { path, state });
                     cx.notify();
                 }
             })
@@ -225,7 +250,8 @@ impl EpubBrowser {
         .detach();
     }
 
-    /// Event handler for the "← Back to list" button on the details page.
+    /// Event handler for the "×" button in the metadata panel: forgets the
+    /// selected book so the panel shows its placeholder again.
     ///
     /// The signature is what GPUI expects from a listener after being wrapped by
     /// `Context::listener`:
@@ -237,17 +263,74 @@ impl EpubBrowser {
     /// * `&mut Context<Self>` — the view context, used here only to notify.
     ///
     /// Being an associated *function* rather than a closure lets us pass it
-    /// straight to `cx.listener(Self::go_back)` without allocating.
-    pub(crate) fn go_back(
+    /// straight to `cx.listener(Self::clear_selection)` without allocating.
+    pub(crate) fn clear_selection(
         &mut self,
         _event: &ClickEvent,
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.screen = Screen::List;
+        self.selected = None;
+        // The catalogue answer belongs to the panel being emptied.
+        self.lookup = LookupState::Idle;
         // THE key line: without `notify` the state changes but the screen keeps
         // showing the old frame.
         cx.notify();
+    }
+
+    /// Event handler for the "Search the BnF" button in the metadata panel.
+    ///
+    /// The search itself is a blocking HTTP request, so it follows the same
+    /// shape as [`Self::select_epub`]: show the loading state, run the request
+    /// on the background executor, then fill the panel in on the main thread.
+    /// The title and author come from the EPUB metadata that is already
+    /// displayed; the file name is used when the file advertises no title.
+    pub(crate) fn lookup_book(
+        &mut self,
+        _event: &ClickEvent,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        // Copy what the search needs out of the selection first, so the borrow
+        // of `self.selected` ends before the fields below are written.
+        let prepared = match &self.selected {
+            Some(Selection {
+                path,
+                state: DetailsState::Ready(details),
+            }) => Some((path.clone(), details.title.clone(), details.creator.clone())),
+            _ => None,
+        };
+        let Some((path, title, author)) = prepared else {
+            return;
+        };
+
+        self.lookup = LookupState::Loading;
+        cx.notify();
+
+        let task = cx.background_spawn(async move { search_books(&title, author.as_deref(), 5) });
+
+        cx.spawn(async move |this, cx| {
+            let outcome = task.await;
+            this.update(cx, |this, cx| {
+                // Only fill in the panel if it still shows this book: the user
+                // may have selected another one (or closed the panel) meanwhile.
+                let still_selected = this
+                    .selected
+                    .as_ref()
+                    .is_some_and(|selection| selection.path == path);
+                if still_selected {
+                    this.lookup = match outcome {
+                        Ok(results) => LookupState::Ready(results),
+                        Err(error) => LookupState::Failed(format!(
+                            "Could not search the BnF catalogue: {error}."
+                        )),
+                    };
+                    cx.notify();
+                }
+            })
+            .ok();
+        })
+        .detach();
     }
 
     /// Event handler for the "+" button.
@@ -288,16 +371,11 @@ impl EpubBrowser {
 /// returns a value describing the UI for *this* frame. GPUI diffs those trees
 /// internally so only what changed is repainted.
 ///
-/// The window keeps one root view, so "navigating" is just choosing which page
-/// the current state describes. All this impl does is pick the page and give it
-/// the window's background — the pages themselves live in [`crate::ui`].
+/// The window keeps one root view, so the whole screen — both columns — is
+/// described in one tree. All this impl does is give it the window's
+/// background; the columns themselves live in [`crate::ui`].
 impl Render for EpubBrowser {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let page = match &self.screen {
-            Screen::List => list::render(self, cx),
-            Screen::Details { path, state } => details::render(self, path, state, cx),
-        };
-
         div()
             // Fill the whole window. `size_full()` == width:100% + height:100%.
             .size_full()
@@ -307,6 +385,6 @@ impl Render for EpubBrowser {
             .p_4()
             .bg(rgb(theme::WINDOW))
             .text_color(rgb(theme::TEXT))
-            .child(page)
+            .child(list::render(self, cx))
     }
 }

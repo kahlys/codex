@@ -26,6 +26,8 @@ pub const CONTROL_HOVER: u32 = 0x585b70;
 
 /// Highlights: links, headings, the primary button.
 pub const ACCENT: u32 = 0x89b4fa;
+/// The primary button under the pointer.
+pub const ACCENT_HOVER: u32 = 0xa8c8fc;
 
 /// Body text.
 pub const TEXT: u32 = 0xcdd6f4;

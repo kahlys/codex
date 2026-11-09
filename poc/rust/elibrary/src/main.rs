@@ -1,9 +1,8 @@
 //! A small **GPUI** app: a search bar that opens the native "pick a folder"
 //! dialog, then lists every `.epub` file found in that folder and its
-//! subfolders. Clicking one of those files opens a detail **page** (in the same
-//! window) showing the metadata stored inside the EPUB itself, with a button to
-//! go back to the list. The original counter lives in the footer of the list
-//! page.
+//! subfolders in the left-hand column. Clicking one of those books shows the
+//! metadata stored inside the EPUB itself in the panel on the right; the list
+//! stays visible the whole time. The original counter lives in the footer.
 //!
 //! Run it with:
 //!
@@ -19,11 +18,12 @@
 //! src/main.rs            entry point: opens the window, nothing else
 //! src/app.rs             state + event handlers ("controller")
 //! src/ui/theme.rs        the colour palette
-//! src/ui/components.rs   widgets shared by both pages
-//! src/ui/list.rs         the list page
-//! src/ui/details.rs      the metadata page
+//! src/ui/components.rs   widgets shared by both columns
+//! src/ui/list.rs         the whole screen, and the book column
+//! src/ui/details.rs      the metadata panel
 //! src/library/scan.rs    find .epub files under a folder
 //! src/library/epub.rs    read metadata out of one EPUB
+//! src/library/lookup.rs  ask the BnF catalogue about one book
 //! src/library/format.rs  sizes and timestamps as text
 //! ```
 //!
@@ -67,13 +67,19 @@
 //! stores the `.epub` files it found. Notifying the view makes `render` paint
 //! the new list.
 //!
-//! Clicking a row switches the view's `screen` field from `Screen::List` to
-//! `Screen::Details`. Both pages are drawn by the same `Render` impl: there is
-//! one window and one root view, so a "page" is just which branch of state is
-//! current. The EPUB file is a ZIP archive, so its metadata is read off the UI
-//! thread with the `zip` crate and parsed with `roxmltree`. The "back" button
-//! sets the screen back to `Screen::List`; the results list keeps its scroll
-//! offset because that handle lives on the view.
+//! Clicking a row stores that path in the view's `selected` field, and the
+//! right-hand panel simply reads it: both columns are drawn by the same
+//! `Render` impl, so selecting a book never navigates anywhere. The EPUB file
+//! is a ZIP archive, so its metadata is read off the UI thread with the `zip`
+//! crate and parsed with `roxmltree`. The "×" button clears the selection, and
+//! both columns keep their scroll offsets because those handles live on the
+//! view.
+//!
+//! The details page also carries a "Search the BnF" button. Pressing it sends
+//! the title and author to the Bibliothèque nationale de France's SRU API, on a
+//! background task like every other blocking operation, and shows the records
+//! that come back (real title, author, publication date and collection) under
+//! the metadata read from the file.
 
 mod app;
 mod library;
@@ -94,8 +100,9 @@ fn main() {
         // A window needs a rectangle before it is created.
         // `Bounds::centered(None, ...)` centres it on the primary display
         // (passing `Some(display_id)` would centre it on a given monitor).
-        // Taller than the counter demo: a file list needs vertical room.
-        let bounds = Bounds::centered(None, size(px(760.0), px(600.0)), cx);
+        // Wider than the counter demo: the file list and the metadata panel
+        // sit side by side, so each needs horizontal room.
+        let bounds = Bounds::centered(None, size(px(1120.0), px(720.0)), cx);
 
         cx.open_window(
             WindowOptions {

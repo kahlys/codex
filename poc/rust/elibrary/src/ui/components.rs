@@ -1,4 +1,4 @@
-//! Small, reusable pieces of UI shared by both pages.
+//! Small, reusable pieces of UI shared by both columns.
 
 use gpui::{
     AnyElement, ClickEvent, Context, IntoElement, ParentElement, StatefulInteractiveElement,
@@ -83,7 +83,10 @@ pub fn detail_section(heading: &str, rows: &[(String, String)]) -> AnyElement {
 
 /// One row inside a [`detail_section`]: a fixed-width label and a value that
 /// takes the rest of the line (and wraps when it is long).
-fn detail_row(label: &str, value: &str) -> impl IntoElement {
+///
+/// `pub(crate)` because the catalogue results on the details page reuse it for
+/// their own cards.
+pub(crate) fn detail_row(label: &str, value: &str) -> impl IntoElement {
     div()
         .w_full()
         .flex()

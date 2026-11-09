@@ -1,4 +1,5 @@
-//! The list page: search bar, status line, results, footer counter.
+//! The single screen: search bar, the books on the left, the metadata panel on
+//! the right, and the footer counter.
 //!
 //! Every function here only *reads* the view; the actions themselves live in
 //! [`crate::app`] and are reached through `cx.listener(...)`.
@@ -12,30 +13,41 @@ use gpui::{
 
 use crate::app::EpubBrowser;
 use crate::ui::components::stepper_button;
-use crate::ui::theme;
+use crate::ui::{details, theme};
 
-/// Builds the whole page.
+/// Width of the book column. Fixed, so the layout does not shift when the
+/// selection changes; the metadata panel takes whatever width is left.
+const LIST_WIDTH: f32 = 300.0;
+
+/// Builds the whole window: search bar, two columns, footer.
 pub fn render(app: &EpubBrowser, cx: &mut Context<EpubBrowser>) -> AnyElement {
     div()
         .flex_1()
         .w_full()
         .flex()
         .flex_col()
-        .gap_4()
-        // The page must be allowed to be smaller than its content for the
-        // inner list to scroll.
+        .gap_3()
+        // The screen must be allowed to be smaller than its content for the
+        // inner columns to scroll.
         .min_h_0()
         // ---- Search bar (opens the folder picker) ------------------
         .child(search_bar(app, cx))
         // ---- Status line ------------------------------------------
+        .child(status_line(app))
+        // ---- Books on the left, selected book on the right ---------
         .child(
             div()
-                .text_size(px(12.0))
-                .text_color(rgb(theme::TEXT_MUTED))
-                .child(app.status.clone()),
+                .flex_1()
+                .w_full()
+                // This row is what gives both columns a bounded height;
+                // without it neither side has anything to scroll inside.
+                .min_h_0()
+                .flex()
+                .flex_row()
+                .gap_3()
+                .child(results(app, cx))
+                .child(details::panel(app, cx)),
         )
-        // ---- The .epub files --------------------------------------
-        .child(results(app, cx))
         // ---- The original counter, kept in the footer -------------
         .child(footer(app, cx))
         .into_any_element()
@@ -99,17 +111,27 @@ fn search_bar(app: &EpubBrowser, cx: &mut Context<EpubBrowser>) -> impl IntoElem
         .on_click(cx.listener(EpubBrowser::pick_folder))
 }
 
-/// The results area: fills the space between the search bar and the footer.
+/// One line saying what the scanner is doing or what it found.
+fn status_line(app: &EpubBrowser) -> impl IntoElement {
+    div()
+        .text_size(px(12.0))
+        .text_color(rgb(theme::TEXT_MUTED))
+        .child(app.status.clone())
+}
+
+/// The left-hand column: every `.epub` file found under the chosen folder.
 fn results(app: &EpubBrowser, cx: &mut Context<EpubBrowser>) -> AnyElement {
     if app.epubs.is_empty() {
         // Both branches return different element types, so each one is
         // boxed with `into_any_element()` to share the `AnyElement` type.
         return div()
-            .flex_1()
-            .w_full()
+            .w(px(LIST_WIDTH))
+            .flex_none()
+            .h_full()
             .flex()
             .items_center()
             .justify_center()
+            .px_2()
             .text_size(px(13.0))
             .text_color(rgb(theme::TEXT_FAINT))
             .child(if app.scanning {
@@ -120,17 +142,20 @@ fn results(app: &EpubBrowser, cx: &mut Context<EpubBrowser>) -> AnyElement {
             .into_any_element();
     }
 
+    let selected_path = app.selected.as_ref().map(|selection| &selection.path);
+
     div()
         // Scrollable containers must have an id (see `StatefulInteractiveElement`)
-        // and a bounded size. `flex_1` gives it exactly the leftover height,
-        // so `overflow_y_scroll` actually has something to scroll.
+        // and a bounded size. `h_full` gives it the height of the row, so
+        // `overflow_y_scroll` actually has something to scroll.
         .id("epub-results")
-        .flex_1()
+        .w(px(LIST_WIDTH))
+        .flex_none()
+        .h_full()
         // A flex item refuses to shrink below its content unless its
         // minimum size is zeroed (CSS `min-height: auto` behaves the same).
         // Without this the list grows past the window instead of scrolling.
         .min_h_0()
-        .w_full()
         .flex()
         .flex_col()
         .gap_1()
@@ -146,15 +171,24 @@ fn results(app: &EpubBrowser, cx: &mut Context<EpubBrowser>) -> AnyElement {
             app.epubs
                 .iter()
                 .enumerate()
-                .map(|(index, path)| row(index, path, cx).into_any_element())
+                .map(|(index, path)| {
+                    let selected =
+                        selected_path.is_some_and(|chosen| chosen.as_path() == path.as_path());
+                    row(index, path, selected, cx).into_any_element()
+                })
                 .collect::<Vec<_>>(),
         )
         .into_any_element()
 }
 
-/// One row of the list: the file name with its folder underneath. Clicking it
-/// opens the details page for that file.
-fn row(index: usize, path: &Path, cx: &mut Context<EpubBrowser>) -> impl IntoElement {
+/// One row of the left-hand list: the file name with its folder underneath.
+/// Clicking it fills the metadata panel; it does not leave this screen.
+fn row(
+    index: usize,
+    path: &Path,
+    selected: bool,
+    cx: &mut Context<EpubBrowser>,
+) -> impl IntoElement {
     let name = path
         .file_name()
         .map(|name| name.to_string_lossy().into_owned())
@@ -177,7 +211,20 @@ fn row(index: usize, path: &Path, cx: &mut Context<EpubBrowser>) -> impl IntoEle
         .px_3()
         .py_2()
         .rounded_md()
-        .bg(rgb(theme::SURFACE))
+        // The selected row is outlined in the accent colour. The border is
+        // drawn on every row (same colour as the background when unselected)
+        // so selecting one does not make it a pixel taller.
+        .border_1()
+        .border_color(rgb(if selected {
+            theme::ACCENT
+        } else {
+            theme::SURFACE
+        }))
+        .bg(rgb(if selected {
+            theme::SURFACE_HOVER
+        } else {
+            theme::SURFACE
+        }))
         .cursor_pointer()
         .hover(|style| style.bg(rgb(theme::SURFACE_HOVER)))
         .child(div().truncate().text_size(px(14.0)).child(name))
@@ -195,7 +242,7 @@ fn row(index: usize, path: &Path, cx: &mut Context<EpubBrowser>) -> impl IntoEle
                   _event: &ClickEvent,
                   _window: &mut Window,
                   cx: &mut Context<EpubBrowser>| {
-                this.open_epub(target.clone(), cx);
+                this.select_epub(target.clone(), cx);
             },
         ))
 }

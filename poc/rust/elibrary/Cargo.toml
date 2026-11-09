@@ -11,3 +11,7 @@ description = "A minimal, heavily commented GPUI counter app"
 gpui = "0.2.2"
 roxmltree = "0.20"
 zip = { version = "9.5.0", default-features = false, features = ["deflate"] }
+# Blocking HTTP client used by `library::lookup` to query the BnF catalogue.
+# `tls` brings rustls + the bundled webpki root certificates, so HTTPS works
+# without depending on the system certificate store.
+ureq = { version = "2", default-features = false, features = ["tls"] }
