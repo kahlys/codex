@@ -1,0 +1,3 @@
+# Build artifacts of this crate (the repository's root .gitignore only covers
+# the workspace's own /target/ directory, not this standalone crate's).
+/target/

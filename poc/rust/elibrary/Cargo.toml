@@ -1,0 +1,13 @@
+[package]
+name = "elibrary"
+version = "0.1.0"
+edition = "2024"
+description = "A minimal, heavily commented GPUI counter app"
+
+[dependencies]
+# GPUI is the UI framework that powers the Zed editor: a GPU-accelerated,
+# hybrid immediate/retained mode UI toolkit that draws its own widgets with
+# DirectX on Windows (Metal on macOS, wgpu on Linux) instead of using native ones.
+gpui = "0.2.2"
+roxmltree = "0.20"
+zip = { version = "9.5.0", default-features = false, features = ["deflate"] }
