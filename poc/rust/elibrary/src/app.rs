@@ -229,13 +229,12 @@ impl EpubBrowser {
     ///
     /// The signature is what GPUI expects from a listener after being wrapped by
     /// `Context::listener`:
-    ///   * `&mut self`  — exclusive access to the view state (this is the reason
-    ///                    `listener` exists: plain `on_click` callbacks cannot
-    ///                    reach it),
-    ///   * `&ClickEvent` — what happened (mouse button, position, modifiers...),
-    ///                     ignored here, hence the `_` name,
-    ///   * `&mut Window` — the window that was clicked,
-    ///   * `&mut Context<Self>` — the view context, used here only to notify.
+    /// * `&mut self`  — exclusive access to the view state (this is the reason
+    ///   `listener` exists: plain `on_click` callbacks cannot reach it),
+    /// * `&ClickEvent` — what happened (mouse button, position, modifiers...),
+    ///   ignored here, hence the `_` name,
+    /// * `&mut Window` — the window that was clicked,
+    /// * `&mut Context<Self>` — the view context, used here only to notify.
     ///
     /// Being an associated *function* rather than a closure lets us pass it
     /// straight to `cx.listener(Self::go_back)` without allocating.
@@ -281,9 +280,9 @@ impl EpubBrowser {
 ///
 /// * `&mut self` — read (and, if you want, write) the state.
 /// * `&mut Window` — window-level services: focus, bounds, scroll, etc. Unused
-///                   in this small app.
+///   in this small app.
 /// * `&mut Context<Self>` — the view context, used to spawn tasks, observe other
-///                   entities, notify, open windows...
+///   entities, notify, open windows...
 ///
 /// Note that `render` does **not** return widgets to be mutated later; it
 /// returns a value describing the UI for *this* frame. GPUI diffs those trees

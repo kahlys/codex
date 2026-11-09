@@ -2,11 +2,10 @@
 //!
 //! An EPUB is a ZIP archive with a fixed layout:
 //!
-//!   * `META-INF/container.xml` — points at the package document,
-//!   * `<something>.opf`       — the package document; its `<metadata>` block
-//!                               carries Dublin Core fields (title, creator,
-//!                               date, language, identifiers...) plus optional
-//!                               `<meta>` entries such as the modification date.
+//! * `META-INF/container.xml` — points at the package document,
+//! * `<something>.opf`       — the package document; its `<metadata>` block
+//!   carries Dublin Core fields (title, creator, date, language, identifiers...)
+//!   plus optional `<meta>` entries such as the modification date.
 //!
 //! So reading metadata is: open the ZIP, read container.xml, follow the
 //! `rootfile@full-path` attribute to the OPF, then walk its metadata elements.
