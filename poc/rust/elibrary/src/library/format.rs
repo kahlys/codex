@@ -38,6 +38,26 @@ pub fn format_utc(time: SystemTime) -> Option<String> {
     ))
 }
 
+/// The current time as `2026-11-12T14:03:05Z`: the form EPUB 3 requires for the
+/// `dcterms:modified` entry, which has to be replaced every time the file is
+/// written. Like [`format_utc`], it reads the clock as UTC.
+pub fn now_timestamp() -> String {
+    let seconds = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_secs() as i64)
+        .unwrap_or(0);
+    let days = seconds.div_euclid(86_400);
+    let seconds_of_day = seconds.rem_euclid(86_400);
+    let (year, month, day) = civil_from_days(days);
+
+    format!(
+        "{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}Z",
+        seconds_of_day / 3_600,
+        (seconds_of_day % 3_600) / 60,
+        seconds_of_day % 60
+    )
+}
+
 /// Days since 1970-01-01 -> (year, month, day). Howard Hinnant's algorithm.
 fn civil_from_days(days: i64) -> (i64, u32, u32) {
     let shifted = days + 719_468;
