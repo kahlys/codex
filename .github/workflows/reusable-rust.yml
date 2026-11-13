@@ -17,6 +17,15 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Install GUI system libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libxkbcommon-dev \
+            libxkbcommon-x11-dev \
+            libfreetype-dev \
+            libxcb1-dev
+
       - name: Run tests
         working-directory: ${{ inputs.working-directory }}
         run: cargo test --verbose
