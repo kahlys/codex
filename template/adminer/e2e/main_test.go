@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"mime/multipart"
 	"net/http"
 	"os"
 	"testing"
@@ -132,4 +133,28 @@ func decodeJSON[T any](t *testing.T, resp *http.Response) T {
 	var v T
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&v))
 	return v
+}
+
+func httpPostFile(t *testing.T, url string, fieldName string, fileName string, content []byte) *http.Response {
+	t.Helper()
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+
+	part, err := writer.CreateFormFile(fieldName, fileName)
+	require.NoError(t, err)
+
+	_, err = part.Write(content)
+	require.NoError(t, err)
+
+	err = writer.Close()
+	require.NoError(t, err)
+
+	req, err := http.NewRequest("POST", url, body)
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	t.Cleanup(func() { resp.Body.Close() })
+	return resp
 }
