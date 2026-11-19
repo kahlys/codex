@@ -139,26 +139,26 @@ paths:
         '400':
           description: Invalid file
 
-  # /files/{fileId}:
-  #   get:
-  #     summary: Download a file
-  #     operationId: downloadFile
-  #     parameters:
-  #       - name: fileId
-  #         in: path
-  #         required: true
-  #         schema:
-  #           type: string
-  #     responses:
-  #       '200':
-  #         description: File content
-  #         content:
-  #           application/octet-stream:
-  #             schema:
-  #               type: string
-  #               format: binary
-  #       '404':
-  #         description: File not found
+  /files/{fileId}:
+    get:
+      summary: Download a file
+      operationId: downloadFile
+      parameters:
+        - name: fileId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: File content
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: File not found
 
 components:
   securitySchemes:

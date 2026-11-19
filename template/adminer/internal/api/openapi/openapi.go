@@ -10,6 +10,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"mime/multipart"
 	"net/http"
 	"net/url"
@@ -64,6 +65,9 @@ type ServerInterface interface {
 	// Upload a file
 	// (POST /files/upload)
 	UploadFile(w http.ResponseWriter, r *http.Request)
+	// Download a file
+	// (GET /files/{fileId})
+	DownloadFile(w http.ResponseWriter, r *http.Request, fileId string)
 	// List all users
 	// (GET /users)
 	Users(w http.ResponseWriter, r *http.Request)
@@ -92,6 +96,32 @@ func (siw *ServerInterfaceWrapper) UploadFile(w http.ResponseWriter, r *http.Req
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.UploadFile(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DownloadFile operation middleware
+func (siw *ServerInterfaceWrapper) DownloadFile(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "fileId" -------------
+	var fileId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "fileId", mux.Vars(r)["fileId"], &fileId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "fileId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DownloadFile(w, r, fileId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -308,6 +338,8 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 
 	r.HandleFunc(options.BaseURL+"/files/upload", wrapper.UploadFile).Methods(http.MethodPost)
 
+	r.HandleFunc(options.BaseURL+"/files/{fileId}", wrapper.DownloadFile).Methods(http.MethodGet)
+
 	r.HandleFunc(options.BaseURL+"/users", wrapper.Users).Methods(http.MethodGet)
 
 	r.HandleFunc(options.BaseURL+"/users", wrapper.CreateUser).Methods(http.MethodPost)
@@ -349,6 +381,42 @@ type UploadFile400Response struct {
 
 func (response UploadFile400Response) VisitUploadFileResponse(w http.ResponseWriter) error {
 	w.WriteHeader(400)
+	return nil
+}
+
+type DownloadFileRequestObject struct {
+	FileId string `json:"fileId"`
+}
+
+type DownloadFileResponseObject interface {
+	VisitDownloadFileResponse(w http.ResponseWriter) error
+}
+
+type DownloadFile200ApplicationoctetStreamResponse struct {
+	Body          io.Reader
+	ContentLength int64
+}
+
+func (response DownloadFile200ApplicationoctetStreamResponse) VisitDownloadFileResponse(w http.ResponseWriter) error {
+
+	w.Header().Set("Content-Type", "application/octet-stream")
+	if response.ContentLength != 0 {
+		w.Header().Set("Content-Length", fmt.Sprint(response.ContentLength))
+	}
+	w.WriteHeader(200)
+
+	if closer, ok := response.Body.(io.ReadCloser); ok {
+		defer closer.Close()
+	}
+	_, err := io.Copy(w, response.Body)
+	return err
+}
+
+type DownloadFile404Response struct {
+}
+
+func (response DownloadFile404Response) VisitDownloadFileResponse(w http.ResponseWriter) error {
+	w.WriteHeader(404)
 	return nil
 }
 
@@ -509,6 +577,9 @@ type StrictServerInterface interface {
 	// Upload a file
 	// (POST /files/upload)
 	UploadFile(ctx context.Context, request UploadFileRequestObject) (UploadFileResponseObject, error)
+	// Download a file
+	// (GET /files/{fileId})
+	DownloadFile(ctx context.Context, request DownloadFileRequestObject) (DownloadFileResponseObject, error)
 	// List all users
 	// (GET /users)
 	Users(ctx context.Context, request UsersRequestObject) (UsersResponseObject, error)
@@ -576,6 +647,32 @@ func (sh *strictHandler) UploadFile(w http.ResponseWriter, r *http.Request) {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(UploadFileResponseObject); ok {
 		if err := validResponse.VisitUploadFileResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DownloadFile operation middleware
+func (sh *strictHandler) DownloadFile(w http.ResponseWriter, r *http.Request, fileId string) {
+	var request DownloadFileRequestObject
+
+	request.FileId = fileId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DownloadFile(ctx, request.(DownloadFileRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DownloadFile")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DownloadFileResponseObject); ok {
+		if err := validResponse.VisitDownloadFileResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -702,18 +799,19 @@ func (sh *strictHandler) UpdateUser(w http.ResponseWriter, r *http.Request, id i
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"xJXfb9MwEMf/FetA4iU0GYyXvO0HoAjEENWeqgp5yWXzcGxjnzdFVf53ZKddujZb9wPGS13Fd+e7z33P",
-	"XkCpG6MVKnKQL8CVF9jw+PfUoQ0rl/Kkhny2gNcWa8jhVTr4pEuHNFgfcofQJQswVhu0JDAGElX4pdYg",
-	"5CAU4Tla6LoELP72wmIF+SwYzZOVkT67xJKgm3cJ3ATON+Ma7ty1tuvRHVmhzqFLwDu0ijc4srlx8o1l",
-	"MkTcTqVLwGHpraB2GkruU+BVI9SBp4tYp4IcSq1/iRCrPxymH6fT4uTbz+IYbmJyI75gu8ryye4hJ6Fq",
-	"HUsUJMPeIXeiZEc/To/ZwfcCErhC64QOofcm2SQLh2qDihsBObyfZJO9WDddxHrSWkh0qTdS88jVaEdh",
-	"Ddw5Ca2KCnI4jfufhEToWaKjQ121wbLUilBFp8ZLEoZbSmttm7cVJz5obLuf4ey4attwghzOhOK2hWRH",
-	"A6PfSMdumZH1GD84o5XrD3yX7W1kzI2RooyFppdOq13pFuPiC1t3i28kzwpdaYWhvlMBLOt7gBVzvizR",
-	"udpLGTWzn2Uh7m2XQl1xKSoWWUSx+qYJ8FbNYnzYS4PsYg3nONbduLvFKnsUK0HYRMddlwYMRLi1vB0D",
-	"csCkcMR0zfrMuwQ+jFOgMMuSObRXaBlaq+0Gjq8hEpdyCDWu8SOLnDBmeJ/G76fwsBvz7yt1N/RtyOE7",
-	"K2PV1U6dCWU8PasPPV/GmcLr2Is1aaYLUXX36jNeWpY3SFHJs+X1GS6y4fIUFWyCTdYgbb1I82dq/inU",
-	"C8KG1dqrJfP9EZrBRGkazB4LfflwRU7DkzObd/P1jnxGYlz1c8HOWlYcx+nwow9ANQzHP2rE/5647GUm",
-	"zkeUD5y4N3eKJMZ6AZH0nV/pZCWTruv+DAA=",
+	"xFZLb9s+DP8qAv9/YBc3drfu4lvbbIOxYR0W5FQEg2rTrTpZ0iS6RRD4uw+S4zoPJ+lj6y5xYpEU+XtI",
+	"WUCuK6MVKnKQLsDlN1jx8HXq0Ponl/KihPRyAf9bLCGF/+I+J14mxD76jDuEJlqAsdqgJYGhkCj8J80N",
+	"QgpCEV6jhaaJwOKvWlgsIL30QbOoC9JXt5gTNLMmgofC6WZdw52713a1uiMr1DU0EdQOreIVDixu7PwQ",
+	"GfUVt1tpInCY11bQfOJHblvgRSXUaU03/odQkEKu9U/ha7Wbw+TDZJJdfP2RjeGhJjfiM867Lp+d7nsS",
+	"qtRhREHSr51xJ3J2/n06ZqffMojgDq0T2pc+HiWjxG+qDSpuBKTwbpSMjsPcdBPmiUsh0cW1kZoHXI12",
+	"5J8ed05Cq6yAFKZh/aOQCC2W6OhMF3MfmWtFqEJSVUsShluKS22ro4IT7zW2zaffOzy1rThBCldCcTuH",
+	"6ACBIW+AsbUwsjWGF85o5doN3ybHGx1zY6TIw6DxrdPqULvZsPj80m7xDfRZoMutMNQy5YFlLQdYMFfn",
+	"OTpX1lIGzZwkia+7npKpOy5FwQIWQax1VXnwOrIY79eWLC/aCRpf7RoHaB7re7VCtOGWV0hoXTgNgl69",
+	"cnq1LiHZxD1awXATjtkWJ8keTnROSEeOLPJqnZvDohmGudsoAHuyDWwIUppYqWtVbEDbAbQGrve024np",
+	"NKw+aehtIQrCKiQeOpGhlxu3ls+HYDhlUjhiumRt500E74clRv6glMyhvUPL0FptNwD54itxKftSwwfI",
+	"uUVOGDrcd4DsR+Fx19GfPwYOg74Nsn/P8jB1cdDEQpmaXsRDiy/jTOF94GJFmvFC7PH8kpPDXheP8nl/",
+	"3c9eqPnnoJ4RVp1xd/g7hKz4++mgL/8VBJz6+/xy1sxWGfmExLhqfcGu5iwbB3fUg7dr0ZvjLxHxrx2X",
+	"vI7j6gDlIx33ZqdIQq1XEEnLfKeTTiZN0/weAA==",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

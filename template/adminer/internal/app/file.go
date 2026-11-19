@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"io"
 
@@ -56,5 +57,31 @@ func (s *Server) UploadFile(ctx context.Context, req openapi.UploadFileRequestOb
 	return openapi.UploadFile201JSONResponse{
 		FileId:   &fileID,
 		Filename: &filename,
+	}, nil
+}
+
+// DownloadFile retrieves a previously uploaded file by its ID and returns it as YAML.
+func (s *Server) DownloadFile(ctx context.Context, req openapi.DownloadFileRequestObject) (openapi.DownloadFileResponseObject, error) {
+	s.log(ctx).Info("DownloadingFile", "fileId", req.FileId)
+
+	s.fileStoreM.Lock()
+	data, exists := s.fileStore[req.FileId]
+	s.fileStoreM.Unlock()
+
+	if !exists {
+		s.log(ctx).Error("file not found", "fileId", req.FileId)
+		return openapi.DownloadFile404Response{}, nil
+	}
+
+	content, err := yaml.Marshal(data)
+	if err != nil {
+		s.log(ctx).Error("failed to marshal YAML", "error", err, "fileId", req.FileId)
+		return openapi.DownloadFile404Response{}, nil
+	}
+
+	s.log(ctx).Info("file downloaded successfully", "fileId", req.FileId)
+
+	return openapi.DownloadFile200ApplicationoctetStreamResponse{
+		Body: io.NopCloser(bytes.NewReader(content)),
 	}, nil
 }

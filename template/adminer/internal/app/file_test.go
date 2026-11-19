@@ -77,6 +77,71 @@ func TestServer_UploadFile(t *testing.T) {
 	}
 }
 
+func TestServer_DownloadFile(t *testing.T) {
+	tests := map[string]struct {
+		fileID           string
+		setupStore       bool
+		wantResponseType string
+		wantContent      string
+	}{
+		"ok": {
+			fileID:           "test-file-id",
+			setupStore:       true,
+			wantResponseType: "DownloadFile200ApplicationoctetStreamResponse",
+			wantContent:      "nested:\n    key1: value1\n    key2: value2\n",
+		},
+		"err_not_found": {
+			fileID:           "nonexistent-id",
+			setupStore:       false,
+			wantResponseType: "DownloadFile404Response",
+			wantContent:      "",
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			mockCtrl := NewMockUserStore(nil)
+			server := NewServer(mockCtrl)
+
+			if tt.setupStore {
+				server.fileStoreM.Lock()
+				server.fileStore[tt.fileID] = map[string]interface{}{
+					"nested": map[string]interface{}{
+						"key1": "value1",
+						"key2": "value2",
+					},
+				}
+				server.fileStoreM.Unlock()
+			}
+
+			resp, err := server.DownloadFile(
+				t.Context(),
+				openapi.DownloadFileRequestObject{
+					FileId: tt.fileID,
+				},
+			)
+			require.NoError(t, err)
+
+			// Verify response type
+			switch tt.wantResponseType {
+			case "DownloadFile200ApplicationoctetStreamResponse":
+				respBody, ok := resp.(openapi.DownloadFile200ApplicationoctetStreamResponse)
+				assert.True(t, ok, "response should be DownloadFile200ApplicationoctetStreamResponse")
+
+				content, err := io.ReadAll(respBody.Body)
+				require.NoError(t, err)
+				assert.Equal(t, tt.wantContent, string(content), "content should match expected YAML")
+
+			case "DownloadFile404Response":
+				_, ok := resp.(openapi.DownloadFile404Response)
+				assert.True(t, ok, "response should be DownloadFile404Response")
+			}
+		})
+	}
+}
+
 func createTestFile(t *testing.T, fieldname, filename, content string) *multipart.Reader {
 	t.Helper()
 
