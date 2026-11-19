@@ -10,6 +10,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"path"
@@ -18,6 +19,7 @@ import (
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/gorilla/mux"
 	"github.com/oapi-codegen/runtime"
+	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
 const (
@@ -43,6 +45,14 @@ type adminAuthContextKey string
 // userAuthContextKey is the context key for userAuth security scheme
 type userAuthContextKey string
 
+// UploadFileMultipartBody defines parameters for UploadFile.
+type UploadFileMultipartBody struct {
+	File openapi_types.File `json:"file"`
+}
+
+// UploadFileMultipartRequestBody defines body for UploadFile for multipart/form-data ContentType.
+type UploadFileMultipartRequestBody UploadFileMultipartBody
+
 // CreateUserJSONRequestBody defines body for CreateUser for application/json ContentType.
 type CreateUserJSONRequestBody = UserBase
 
@@ -51,6 +61,9 @@ type UpdateUserJSONRequestBody = UserBase
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	// Upload a file
+	// (POST /files/upload)
+	UploadFile(w http.ResponseWriter, r *http.Request)
 	// List all users
 	// (GET /users)
 	Users(w http.ResponseWriter, r *http.Request)
@@ -73,6 +86,20 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(http.Handler) http.Handler
+
+// UploadFile operation middleware
+func (siw *ServerInterfaceWrapper) UploadFile(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UploadFile(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
 
 // Users operation middleware
 func (siw *ServerInterfaceWrapper) Users(w http.ResponseWriter, r *http.Request) {
@@ -279,6 +306,8 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 		ErrorHandlerFunc:   options.ErrorHandlerFunc,
 	}
 
+	r.HandleFunc(options.BaseURL+"/files/upload", wrapper.UploadFile).Methods(http.MethodPost)
+
 	r.HandleFunc(options.BaseURL+"/users", wrapper.Users).Methods(http.MethodGet)
 
 	r.HandleFunc(options.BaseURL+"/users", wrapper.CreateUser).Methods(http.MethodPost)
@@ -288,6 +317,39 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 	r.HandleFunc(options.BaseURL+"/users/{id}", wrapper.UpdateUser).Methods(http.MethodPut)
 
 	return r
+}
+
+type UploadFileRequestObject struct {
+	Body *multipart.Reader
+}
+
+type UploadFileResponseObject interface {
+	VisitUploadFileResponse(w http.ResponseWriter) error
+}
+
+type UploadFile201JSONResponse struct {
+	FileId   *string `json:"fileId,omitempty"`
+	Filename *string `json:"filename,omitempty"`
+}
+
+func (response UploadFile201JSONResponse) VisitUploadFileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UploadFile400Response struct {
+}
+
+func (response UploadFile400Response) VisitUploadFileResponse(w http.ResponseWriter) error {
+	w.WriteHeader(400)
+	return nil
 }
 
 type UsersRequestObject struct {
@@ -444,6 +506,9 @@ func (response UpdateUser500Response) VisitUpdateUserResponse(w http.ResponseWri
 
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
+	// Upload a file
+	// (POST /files/upload)
+	UploadFile(ctx context.Context, request UploadFileRequestObject) (UploadFileResponseObject, error)
 	// List all users
 	// (GET /users)
 	Users(ctx context.Context, request UsersRequestObject) (UsersResponseObject, error)
@@ -485,6 +550,37 @@ type strictHandler struct {
 	ssi         StrictServerInterface
 	middlewares []StrictMiddlewareFunc
 	options     StrictHTTPServerOptions
+}
+
+// UploadFile operation middleware
+func (sh *strictHandler) UploadFile(w http.ResponseWriter, r *http.Request) {
+	var request UploadFileRequestObject
+
+	if reader, err := r.MultipartReader(); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode multipart body: %w", err))
+		return
+	} else {
+		request.Body = reader
+	}
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UploadFile(ctx, request.(UploadFileRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UploadFile")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UploadFileResponseObject); ok {
+		if err := validResponse.VisitUploadFileResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
 }
 
 // Users operation middleware
@@ -606,16 +702,18 @@ func (sh *strictHandler) UpdateUser(w http.ResponseWriter, r *http.Request, id i
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"xFTdbtQ8EH0Va75P4ibaTaHc5K4/CEUgilj1arVCbjLbuiS2sSetopXfHY29adpugP5AuVlH65kzc86c",
-	"8QYq01qjUZOHYgO+usBWxs9Tj45P2TQnayiWG/jf4RoK+G8+5sy3CXOOPpQeIWQbsM5YdKQwAqmaf6m3",
-	"CAUoTXiODkLIwOH3TjmsoVhy0CobgszZJVYEYRUyuAEu7uNa6f21cbfRPTmlzyFk0Hl0WrY4cXmv8k1k",
-	"NiLuthIy8Fh1TlG/YMqpBVm3Sh90dBF5aiigMuabYqxUHBbvFovy5NPX8hhuMKVVH7AfunxyOvek9NpE",
-	"iooavjuUXlXi6MvpsTj4XEIGV+i8Mgy9N8tnORc1FrW0Cgp4M8tne5E3XUQ+c24ofp0j8cF6S1JGlzUU",
-	"cRYeWD5vjfZJg9d5zkdlNKGOSdLaRlUxbX7pufhgrMiTsI2Jv7MT9zpQdk5uGdfoK6csJVIHolGehFmL",
-	"1HnI4G3q525cqYmn3AiP7gqdQOdMMqHv2la6Hgr4yEiyaUYoa/yECkcOJWHsMDkJPR2aun+UCg/bpbte",
-	"Jddh2FF/74/WnRKZ/xdVZF2zLPvTCl/JRtVCadvRs+aQ9BVSaLyOs4j3yZrzjarDL/0Z7exkixSdvNwu",
-	"Flt8XCtVw31hs1si7bxVq2d6/imql4StWJtObzXfn1CTQ7ShMeyxom+ftKjT+BgtV8x4nMh7JCF12gtx",
-	"1ovyOG5HNzUCW4/L8ZcG8a83Ln+ZjeuilA/cuFc/NUnEegGTpMkPPhlsEkL4EQAA//8=",
+	"xJXfb9MwEMf/FetA4iU0GYyXvO0HoAjEENWeqgp5yWXzcGxjnzdFVf53ZKddujZb9wPGS13Fd+e7z33P",
+	"XkCpG6MVKnKQL8CVF9jw+PfUoQ0rl/Kkhny2gNcWa8jhVTr4pEuHNFgfcofQJQswVhu0JDAGElX4pdYg",
+	"5CAU4Tla6LoELP72wmIF+SwYzZOVkT67xJKgm3cJ3ATON+Ma7ty1tuvRHVmhzqFLwDu0ijc4srlx8o1l",
+	"MkTcTqVLwGHpraB2GkruU+BVI9SBp4tYp4IcSq1/iRCrPxymH6fT4uTbz+IYbmJyI75gu8ryye4hJ6Fq",
+	"HUsUJMPeIXeiZEc/To/ZwfcCErhC64QOofcm2SQLh2qDihsBObyfZJO9WDddxHrSWkh0qTdS88jVaEdh",
+	"Ddw5Ca2KCnI4jfufhEToWaKjQ121wbLUilBFp8ZLEoZbSmttm7cVJz5obLuf4ey4attwghzOhOK2hWRH",
+	"A6PfSMdumZH1GD84o5XrD3yX7W1kzI2RooyFppdOq13pFuPiC1t3i28kzwpdaYWhvlMBLOt7gBVzvizR",
+	"udpLGTWzn2Uh7m2XQl1xKSoWWUSx+qYJ8FbNYnzYS4PsYg3nONbduLvFKnsUK0HYRMddlwYMRLi1vB0D",
+	"csCkcMR0zfrMuwQ+jFOgMMuSObRXaBlaq+0Gjq8hEpdyCDWu8SOLnDBmeJ/G76fwsBvz7yt1N/RtyOE7",
+	"K2PV1U6dCWU8PasPPV/GmcLr2Is1aaYLUXX36jNeWpY3SFHJs+X1GS6y4fIUFWyCTdYgbb1I82dq/inU",
+	"C8KG1dqrJfP9EZrBRGkazB4LfflwRU7DkzObd/P1jnxGYlz1c8HOWlYcx+nwow9ANQzHP2rE/5647GUm",
+	"zkeUD5y4N3eKJMZ6AZH0nV/pZCWTruv+DAA=",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

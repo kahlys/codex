@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"sync"
 
 	"github.com/getkin/kin-openapi/openapi3filter"
 	"github.com/gorilla/mux"
@@ -23,8 +24,10 @@ type UserStore interface {
 
 // Server represents the main application server that handles user-related operations and interacts with the UserStore for database access.
 type Server struct {
-	userStore UserStore
-	logger    *slog.Logger
+	userStore  UserStore
+	logger     *slog.Logger
+	fileStore  map[string]map[string]interface{}
+	fileStoreM sync.Mutex
 }
 
 var _ openapi.StrictServerInterface = (*Server)(nil)
@@ -34,6 +37,7 @@ func NewServer(userStore UserStore, opts ...ServerOption) *Server {
 	s := &Server{
 		userStore: userStore,
 		logger:    slog.Default(),
+		fileStore: make(map[string]map[string]interface{}),
 	}
 	for _, opt := range opts {
 		opt(s)
