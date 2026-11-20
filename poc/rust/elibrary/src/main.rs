@@ -75,7 +75,7 @@
 //! both columns keep their scroll offsets because those handles live on the
 //! view.
 //!
-//! The details page also carries a "Search the BnF" button. Pressing it sends
+//! The details page also carries a "Clean EPUB" button. Pressing it sends
 //! the title and author to the Bibliothèque nationale de France's SRU API, on a
 //! background task like every other blocking operation. The best record it
 //! returns is written into the EPUB's package document (title, author,

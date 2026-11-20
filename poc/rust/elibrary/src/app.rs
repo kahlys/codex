@@ -307,7 +307,7 @@ impl EpubBrowser {
         cx.notify();
     }
 
-    /// Event handler for the "Search the BnF" button in the metadata panel.
+    /// Event handler for the "Clean EPUB" button in the metadata panel.
     ///
     /// The search itself is a blocking HTTP request, so it follows the same
     /// shape as [`Self::select_epub`]: show the loading state, run the request
@@ -388,7 +388,7 @@ impl EpubBrowser {
                         }
                         Err(error) => {
                             this.lookup = LookupState::Failed(format!(
-                                "Could not search the BnF catalogue: {error}."
+                                "Could not clean the EPUB: {error}."
                             ));
                             None
                         }

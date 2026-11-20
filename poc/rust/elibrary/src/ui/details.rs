@@ -58,7 +58,7 @@ fn placeholder() -> AnyElement {
 }
 
 
-/// The path of the selected file, the catalogue button, and the button that
+/// The path of the selected file, the clean button, and the button that
 /// empties the panel.
 fn header(path: &Path, state: &DetailsState, cx: &mut Context<EpubBrowser>) -> AnyElement {
     let mut row = div()
@@ -210,7 +210,7 @@ fn search_button(cx: &mut Context<EpubBrowser>) -> AnyElement {
             div()
                 .text_size(px(13.0))
                 .text_color(rgb(theme::ON_ACCENT))
-                .child("Search the BnF"),
+                .child("Clean EPUB"),
         )
         .on_click(cx.listener(EpubBrowser::lookup_book))        .into_any_element()
 }
@@ -223,13 +223,13 @@ fn lookup_section(app: &EpubBrowser) -> Option<AnyElement> {
     match &app.lookup {
         LookupState::Idle => None,
         LookupState::Loading => Some(note(
-            "Searching the BnF catalogue…",
+            "Cleaning the EPUB…",
             theme::TEXT_MUTED,
             theme::TEXT_FAINT,
         )),
         LookupState::Failed(error) => Some(note(error, theme::DANGER, theme::TEXT_FAINT)),
         LookupState::Ready(results) if results.books.is_empty() => Some(note(
-            "No match in the BnF catalogue.",
+            "No matching metadata was found; the file was left unchanged.",
             theme::TEXT_MUTED,
             theme::TEXT_FAINT,
         )),
@@ -250,11 +250,11 @@ fn replaced_message(results: &CatalogueResults, save: &SaveState) -> (String, u3
     // why the values may not be the only ones the catalogue knows.
     let source = if results.total > 1 {
         format!(
-            "Metadata replaced from the BnF catalogue ({} matches, the first one was used).",
+            "EPUB cleaned ({} matches found, the first one was used).",
             results.total
         )
     } else {
-        "Metadata replaced from the BnF catalogue.".to_string()
+        "EPUB cleaned.".to_string()
     };
 
     // `error` is a full clause ("It could not be written ..."), because the
@@ -284,7 +284,7 @@ fn note(message: &str, color: u32, hint_color: u32) -> AnyElement {
             div()
                 .text_size(px(11.0))
                 .text_color(rgb(hint_color))
-                .child("Bibliothèque nationale de France · catalogue.bnf.fr"),
+                .child("The title, author, year and series in the file were refreshed."),
         )        .into_any_element()
 }
 
