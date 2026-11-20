@@ -163,6 +163,10 @@ fn ready(app: &EpubBrowser, details: &BookDetails) -> AnyElement {
         .gap_3()
         .overflow_y_scroll()
         .track_scroll(&app.details_scroll)
+        // ---- Catalogue answer, at the top so it is seen at once ----
+        // `children` takes an iterator; `Option` is one, so an "idle" lookup
+        // contributes nothing to the panel at all.
+        .children(lookup_section(app))
         // ---- Headline: title and author -------------------
         .child(
             div()
@@ -187,10 +191,6 @@ fn ready(app: &EpubBrowser, details: &BookDetails) -> AnyElement {
         // ever shown through what was written into the EPUB, never as invented
         // rows. `detail_section` prints a placeholder when it is empty.
         .child(detail_section("Metadata", &details.entries))
-        // ---- What the catalogue says, once the button was pressed ----
-        // `children` takes an iterator; `Option` is one, so an "idle" lookup
-        // contributes nothing to the panel at all.
-        .children(lookup_section(app))
         // ---- Facts about the file on disk -----------------
         .child(detail_section("File", &details.file))        .into_any_element()
 }
