@@ -66,35 +66,56 @@ pub struct CatalogueResults {
     pub books: Vec<BookRecord>,
 }
 
-/// Searches the catalogue for `title` (and, when we have one, `author`).
+/// Searches the catalogue with each of `titles` until one of them matches, and
+/// returns the first answer that has records in it.
+///
+/// `titles` are the names the book goes by, best first: what its metadata
+/// advertises, then the name its file has. The catalogue is strict about every
+/// word of a quoted title, so a book whose title the EPUB spells with a mention
+/// the catalogue does not index (`(Tome 1)`, a subtitle...) only matches under
+/// the other name. An answer with no records is therefore not the end of the
+/// search: the next candidate is asked instead.
 ///
 /// Errors are lowercase clauses meant to complete the sentence "Could not
 /// search the BnF catalogue: ...".
 pub fn search_books(
-    title: &str,
+    titles: &[String],
     author: Option<&str>,
     limit: usize,
 ) -> Result<CatalogueResults, String> {
-    let Some(query) = cql_query(title, author) else {
-        return Err("this EPUB does not name anything to search for".to_string());
-    };
-
     // Ask for more records than we show, because the relevance ranking mixes in
     // films, recordings and other non-book material (see `parse_response`).
     let wanted = (limit * 4).clamp(1, 40);
-    let results = run_query(&query, wanted, limit)?;
 
-    // The author as written inside an EPUB ("J. K. Rowling") rarely matches the
-    // catalogue's "Rowling, J. K.", so an empty answer may just mean the author
-    // filter was too strict. Ask again with the title alone.
-    if results.books.is_empty()
-        && author.is_some()
-        && let Some(fallback) = cql_query(title, None)
-    {
-        return run_query(&fallback, wanted, limit);
+    // The answer to the first candidate, kept only for the case where none of
+    // them matches: its total is still what the panel has to report.
+    let mut first: Option<CatalogueResults> = None;
+
+    for title in titles {
+        let Some(query) = cql_query(title, author) else {
+            continue;
+        };
+        let mut results = run_query(&query, wanted, limit)?;
+
+        // The author as written inside an EPUB ("J. K. Rowling") rarely matches
+        // the catalogue's "Rowling, J. K.", so an empty answer may just mean
+        // the author filter was too strict. Ask again with the title alone.
+        if results.books.is_empty()
+            && author.is_some()
+            && let Some(fallback) = cql_query(title, None)
+        {
+            results = run_query(&fallback, wanted, limit)?;
+        }
+
+        if !results.books.is_empty() {
+            return Ok(results);
+        }
+        if first.is_none() {
+            first = Some(results);
+        }
     }
 
-    Ok(results)
+    first.ok_or_else(|| "this EPUB does not name anything to search for".to_string())
 }
 
 /// Builds the CQL query, or `None` when the title normalises to nothing.

@@ -313,7 +313,9 @@ impl EpubBrowser {
     /// shape as [`Self::select_epub`]: show the loading state, run the request
     /// on the background executor, then fill the panel in on the main thread.
     /// The title and author come from the EPUB metadata that is already
-    /// displayed; the file name is used when the file advertises no title.
+    /// displayed. A title that is only an approximation of the book's name often
+    /// finds nothing in the catalogue, so the search is retried with the other
+    /// name the book goes by — the file name — when the first one is empty.
     ///
     /// When the catalogue answers, the best match is written into the EPUB
     /// itself on another background task: its title, author, year and saga
@@ -333,10 +335,34 @@ impl EpubBrowser {
             Some(Selection {
                 path,
                 state: DetailsState::Ready(details),
-            }) => Some((path.clone(), details.title.clone(), details.creator.clone())),
+            }) => {
+                // Every name the book goes by, best first: the title its own
+                // metadata advertises, the title the panel shows (that same
+                // title, or the file name when the file names none), and the
+                // bare file name. Duplicates are dropped, so the usual case is
+                // still a single query.
+                let mut titles: Vec<String> = Vec::new();
+                let file_stem = path
+                    .file_stem()
+                    .map(|stem| stem.to_string_lossy().into_owned());
+                for candidate in [
+                    details.metadata_title.as_deref(),
+                    Some(details.title.as_str()),
+                    file_stem.as_deref(),
+                ] {
+                    let Some(title) = candidate.map(str::trim).filter(|title| !title.is_empty())
+                    else {
+                        continue;
+                    };
+                    if !titles.iter().any(|known| known == title) {
+                        titles.push(title.to_string());
+                    }
+                }
+                Some((path.clone(), titles, details.creator.clone()))
+            }
             _ => None,
         };
-        let Some((path, title, author)) = prepared else {
+        let Some((path, titles, author)) = prepared else {
             return;
         };
 
@@ -344,7 +370,8 @@ impl EpubBrowser {
         self.save = SaveState::Idle;
         cx.notify();
 
-        let task = cx.background_spawn(async move { search_books(&title, author.as_deref(), 5) });
+        let task =
+            cx.background_spawn(async move { search_books(&titles, author.as_deref(), 5) });
 
         cx.spawn(async move |this, cx| {
             let outcome = task.await;

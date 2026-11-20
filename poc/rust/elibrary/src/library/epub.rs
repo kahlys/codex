@@ -43,6 +43,10 @@ use super::format::{format_utc, human_size, now_timestamp};
 pub struct BookDetails {
     /// Shown as the page headline. Falls back to the file stem.
     pub title: String,
+    /// The title the file itself advertises, `None` when it names none. The
+    /// headline above already falls back to the file name; this keeps the
+    /// file's own answer available to the catalogue search.
+    pub metadata_title: Option<String>,
     /// Shown under the headline; `None` for files that name no author.
     pub creator: Option<String>,
     /// Every metadata field found, in document order, as (label, value).
@@ -68,11 +72,17 @@ pub fn read_epub(path: &Path) -> Result<BookDetails, String> {
 
     let entries = parse_metadata(&package_xml)?;
 
-    // The headline needs a title even when the file names none.
-    let title = entries
+    // The title the file itself advertises, kept apart from the headline: the
+    // catalogue search tries both that title and the file name, so it needs to
+    // know which of the two the headline is showing.
+    let metadata_title = entries
         .iter()
         .find(|(label, _)| label == "Title")
-        .map(|(_, value)| value.clone())
+        .map(|(_, value)| value.clone());
+
+    // The headline needs a title even when the file names none.
+    let title = metadata_title
+        .clone()
         .or_else(|| {
             path.file_stem()
                 .map(|stem| stem.to_string_lossy().into_owned())
@@ -85,6 +95,7 @@ pub fn read_epub(path: &Path) -> Result<BookDetails, String> {
 
     Ok(BookDetails {
         title,
+        metadata_title,
         creator,
         entries,
         file: file_facts(path),
