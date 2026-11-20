@@ -57,37 +57,6 @@ pub struct BookRecord {
     pub isbn: Option<String>,
 }
 
-impl BookRecord {
-    /// The record as the rows the details page shows once it has replaced the
-    /// metadata read from the EPUB.
-    ///
-    /// Title, author and year are always present; the saga and its tome only
-    /// appear when the catalogue names a collection, and the tome only when it
-    /// also gives a volume number.
-    pub fn metadata_rows(&self) -> Vec<(String, String)> {
-        let mut rows = vec![
-            ("Title".to_string(), self.title.clone()),
-            (
-                "Author".to_string(),
-                self.author.clone().unwrap_or_else(|| "Unknown".to_string()),
-            ),
-            (
-                "Published".to_string(),
-                self.date.clone().unwrap_or_else(|| "Unknown".to_string()),
-            ),
-        ];
-
-        if let Some(saga) = &self.saga {
-            rows.push(("Saga".to_string(), saga.clone()));
-            if let Some(tome) = &self.tome {
-                rows.push(("Tome".to_string(), tome.clone()));
-            }
-        }
-
-        rows
-    }
-}
-
 /// The answer to one search: how many records exist in total, and the first few
 /// of them ready to display.
 pub struct CatalogueResults {

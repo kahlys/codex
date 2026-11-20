@@ -183,8 +183,9 @@ fn ready(app: &EpubBrowser, details: &BookDetails) -> AnyElement {
                 ),
         )
         // ---- The full metadata table ----------------------
-        // Once the catalogue has answered, these are its rows instead of the
-        // file's. `detail_section` prints a placeholder when it is empty.
+        // Always exactly what the file stores: the catalogue answer is only
+        // ever shown through what was written into the EPUB, never as invented
+        // rows. `detail_section` prints a placeholder when it is empty.
         .child(detail_section("Metadata", &details.entries))
         // ---- What the catalogue says, once the button was pressed ----
         // `children` takes an iterator; `Option` is one, so an "idle" lookup
@@ -217,7 +218,7 @@ fn search_button(cx: &mut Context<EpubBrowser>) -> AnyElement {
 
 /// The catalogue block below the metadata: nothing while idle, a note while
 /// searching, an error when the request failed, or confirmation that the
-/// metadata now comes from the catalogue.
+/// catalogue's values are now in the file.
 fn lookup_section(app: &EpubBrowser) -> Option<AnyElement> {
     match &app.lookup {
         LookupState::Idle => None,
@@ -239,8 +240,11 @@ fn lookup_section(app: &EpubBrowser) -> Option<AnyElement> {
     }
 }
 
-/// The confirmation under the replaced metadata: where the values came from,
-/// and what happened when they were written back into the EPUB.
+/// The confirmation under the metadata: where the values came from, and what
+/// happened when they were written back into the EPUB.
+///
+/// Success is only reported once the written file has been read back, so the
+/// panel's rows are the file's own by the time this message appears.
 fn replaced_message(results: &CatalogueResults, save: &SaveState) -> (String, u32) {
     // The first record is already applied; saying how many matched explains
     // why the values may not be the only ones the catalogue knows.
@@ -253,15 +257,15 @@ fn replaced_message(results: &CatalogueResults, save: &SaveState) -> (String, u3
         "Metadata replaced from the BnF catalogue.".to_string()
     };
 
+    // `error` is a full clause ("It could not be written ..."), because the
+    // failure may come from the write or from reading the file back.
+
     match save {
         SaveState::Idle | SaveState::Writing => {
             (format!("{source} Writing it into the file…"), theme::TEXT_MUTED)
         }
         SaveState::Saved => (format!("{source} It was saved in the file."), theme::TEXT_MUTED),
-        SaveState::Failed(error) => (
-            format!("{source} It could not be written into the file: {error}."),
-            theme::DANGER,
-        ),
+        SaveState::Failed(error) => (format!("{source} {error}."), theme::DANGER),
     }
 }
 

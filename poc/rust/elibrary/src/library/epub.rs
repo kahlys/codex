@@ -314,8 +314,11 @@ fn file_facts(path: &Path) -> Vec<(String, String)> {
     facts
 }
 
-/// The metadata that replaces an EPUB's own: what the details page shows and
-/// what [`write_metadata`] puts into the package document.
+/// The metadata that replaces an EPUB's own, as [`write_metadata`] puts it into
+/// the package document.
+///
+/// The details page never shows these values directly: it re-reads the file
+/// after the write, so what it displays is always what the EPUB really stores.
 ///
 /// The saga and its tome are a pair: a volume number only makes sense when the
 /// book belongs to a collection.

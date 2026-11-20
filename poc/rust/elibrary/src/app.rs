@@ -65,7 +65,7 @@ pub enum LookupState {
     /// The request is in flight.
     Loading,
     /// What the Bibliothèque nationale de France knows about this book; its
-    /// first record is the one already applied to the panel.
+    /// first record is the one already written into the file.
     Ready(CatalogueResults),
     /// The request failed; the message is shown verbatim.
     Failed(String),
@@ -75,7 +75,8 @@ pub enum LookupState {
 ///
 /// It is separate from [`LookupState`] because the file can fail to be written
 /// long after the catalogue answered, and the panel says which of the two
-/// happened.
+/// happened. Success means the file has been written *and* read back, so the
+/// panel shows the rows the EPUB now stores.
 #[derive(Default)]
 pub enum SaveState {
     /// Nothing has been written for the selected book.
@@ -314,11 +315,12 @@ impl EpubBrowser {
     /// The title and author come from the EPUB metadata that is already
     /// displayed; the file name is used when the file advertises no title.
     ///
-    /// When the catalogue answers, the best match replaces the file's metadata
-    /// outright: its title, author, year and saga become the rows of the
-    /// panel, and everything the EPUB claimed is dropped. The same values are
-    /// then written into the EPUB itself on another background task, because
-    /// the panel and the file must not disagree.
+    /// When the catalogue answers, the best match is written into the EPUB
+    /// itself on another background task: its title, author, year and saga
+    /// replace the file's own, and the mandatory entries the format cannot do
+    /// without (identifier, language, cover pointer, modification date) are
+    /// kept. The panel is then filled from the file that was just written, not
+    /// from the catalogue answer, so it shows exactly what the book stores now.
     pub(crate) fn lookup_book(
         &mut self,
         _event: &ClickEvent,
@@ -366,19 +368,14 @@ impl EpubBrowser {
                         Ok(results) => {
                             // `books` is sorted best-match first, so the first
                             // record is the one whose metadata replaces the
-                            // file's own. An empty answer leaves the panel as
+                            // file's own. An empty answer leaves the file as
                             // the EPUB described it.
+                            //
+                            // The panel is deliberately not rewritten here: it
+                            // only ever shows what the file really contains,
+                            // so it is refreshed by re-reading the file once
+                            // the write below has landed (see the task below).
                             let best = results.books.first();
-                            if let Some(record) = best
-                                && let Some(Selection {
-                                    state: DetailsState::Ready(details),
-                                    ..
-                                }) = this.selected.as_mut()
-                            {
-                                details.title = record.title.clone();
-                                details.creator = record.author.clone();
-                                details.entries = record.metadata_rows();
-                            }
                             let to_write = best.map(|record| EpubMetadata {
                                 title: record.title.clone(),
                                 author: record.author.clone(),
@@ -413,10 +410,19 @@ impl EpubBrowser {
             };
 
             // Then the file: rewriting the whole archive is blocking IO, so it
-            // goes to the background executor like the search did.
+            // goes to the background executor like the search did. The rewritten
+            // file is read back straight away, because the panel must show the
+            // metadata the file really holds — the same rows the book shows
+            // when it is selected again — rather than the values we asked for.
             let save_path = path.clone();
             let still_wanted = save_path.clone();
-            let write = cx.background_spawn(async move { write_metadata(&save_path, &metadata) });
+            let write = cx.background_spawn(async move {
+                match write_metadata(&save_path, &metadata) {
+                    Ok(()) => read_epub(&save_path)
+                        .map_err(|error| format!("It was written, but could not be read back ({error})")),
+                    Err(error) => Err(format!("It could not be written into the file: {error}")),
+                }
+            });
             let result = write.await;
 
             this.update(cx, |this, cx| {
@@ -425,10 +431,17 @@ impl EpubBrowser {
                     .as_ref()
                     .is_some_and(|selection| selection.path == still_wanted);
                 if still_selected {
-                    this.save = match result {
-                        Ok(()) => SaveState::Saved,
-                        Err(error) => SaveState::Failed(error),
-                    };
+                    match result {
+                        Ok(details) => {
+                            this.save = SaveState::Saved;
+                            // The file is the only source of the panel: the
+                            // rows are now literally the ones it stores.
+                            if let Some(selection) = this.selected.as_mut() {
+                                selection.state = DetailsState::Ready(details);
+                            }
+                        }
+                        Err(error) => this.save = SaveState::Failed(error),
+                    }
                     cx.notify();
                 }
             })
