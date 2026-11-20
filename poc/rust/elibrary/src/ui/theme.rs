@@ -40,3 +40,5 @@ pub const TEXT_DIM: u32 = 0x585b70;
 
 /// Errors.
 pub const DANGER: u32 = 0xf38ba8;
+/// A book this app already cleaned: the check next to its name in the list.
+pub const SUCCESS: u32 = 0xa6e3a1;

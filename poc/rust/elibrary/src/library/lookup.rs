@@ -31,9 +31,12 @@
 //! run off the UI thread.
 
 use std::io::Read;
+use std::path::Path;
 use std::time::Duration;
 
 use roxmltree::Document;
+
+use super::epub::{BookDetails, EpubMetadata, read_epub, write_metadata};
 
 /// BnF SRU endpoint. The schema is chosen per request (see the module comment).
 const ENDPOINT: &str = "https://catalogue.bnf.fr/api/SRU";
@@ -116,6 +119,55 @@ pub fn search_books(
     }
 
     first.ok_or_else(|| "this EPUB does not name anything to search for".to_string())
+}
+
+/// Cleans one EPUB in place: what the details page's "Clean EPUB" button
+/// does, without a panel to show the answer in.
+///
+/// The list calls this once per file. The book is read, searched for under
+/// every name it goes by, and the best match is written into its package
+/// document; the rewritten file is read back, so a `Ok` really means the file
+/// now stores what the catalogue said. Errors are lowercase clauses meant to
+/// follow the file's name (`book.epub: ...`).
+pub fn clean_epub(path: &Path) -> Result<BookDetails, String> {
+    let details = read_epub(path)?;
+
+    // Same candidates as the details page, best first: the title the file
+    // advertises, the title the panel would show, and the bare file name.
+    let mut titles: Vec<String> = Vec::new();
+    let file_stem = path
+        .file_stem()
+        .map(|stem| stem.to_string_lossy().into_owned());
+    for candidate in [
+        details.metadata_title.as_deref(),
+        Some(details.title.as_str()),
+        file_stem.as_deref(),
+    ] {
+        let Some(title) = candidate.map(str::trim).filter(|title| !title.is_empty()) else {
+            continue;
+        };
+        if !titles.iter().any(|known| known == title) {
+            titles.push(title.to_string());
+        }
+    }
+    if titles.is_empty() {
+        return Err("it does not name anything to search for".to_string());
+    }
+
+    let results = search_books(&titles, details.creator.as_deref(), 1)?;
+    let Some(best) = results.books.first() else {
+        return Err("the catalogue knows no book under its title".to_string());
+    };
+
+    let metadata = EpubMetadata {
+        title: best.title.clone(),
+        author: best.author.clone(),
+        published: best.date.clone(),
+        saga: best.saga.clone(),
+        tome: best.tome.clone(),
+    };
+    write_metadata(path, &metadata)?;
+    read_epub(path).map_err(|error| format!("it was written, but could not be read back ({error})"))
 }
 
 /// Builds the CQL query, or `None` when the title normalises to nothing.

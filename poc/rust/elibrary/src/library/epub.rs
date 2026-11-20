@@ -15,7 +15,9 @@
 //! from scratch — everything the book used to claim is dropped, and only the new
 //! fields plus the few entries an EPUB cannot do without (identifier, language,
 //! cover pointer, modification date) are written back — then the whole ZIP is
-//! rebuilt next to the book, and that copy replaces the original file.
+//! rebuilt next to the book, and that copy replaces the original file. One extra
+//! entry records that *this app* wrote the file, which is what the list reads to
+//! put a green check next to the books it has already cleaned.
 //!
 //! `zip` reads the container, `roxmltree` turns the XML documents into a small
 //! read-only tree we can walk (much easier, and safer, than matching tags by
@@ -36,6 +38,14 @@ const OPF_NAMESPACE: &str = "http://www.idpf.org/2007/opf";
 /// Id given to the `belongs-to-collection` entry this app writes, so its two
 /// refinements can point at it.
 const SAGA_ID: &str = "elibrary-saga";
+/// The `name` of the `<meta>` entry this app leaves in every file it rewrites.
+///
+/// It is the record of "this book was cleaned by us": the list shows a check
+/// next to a file that carries it, and the details page shows it as a row.
+const CLEANED_META: &str = "elibrary:cleaned";
+/// The label [`CLEANED_META`] is displayed under, which is the name of its
+/// local part run through [`label_for`].
+const CLEANED_LABEL: &str = "Cleaned";
 
 use super::format::{format_utc, human_size, now_timestamp};
 
@@ -49,6 +59,9 @@ pub struct BookDetails {
     pub metadata_title: Option<String>,
     /// Shown under the headline; `None` for files that name no author.
     pub creator: Option<String>,
+    /// When this app last rewrote the file, `None` for a file it never touched.
+    /// Read from the marker entry [`write_metadata`] leaves behind.
+    pub cleaned: Option<String>,
     /// Every metadata field found, in document order, as (label, value).
     pub entries: Vec<(String, String)>,
     /// Facts about the file on disk (name, folder, size, modified...).
@@ -92,14 +105,46 @@ pub fn read_epub(path: &Path) -> Result<BookDetails, String> {
         .iter()
         .find(|(label, _)| matches!(label.as_str(), "Author" | "Creator" | "Contributor"))
         .map(|(_, value)| value.clone());
+    let cleaned = cleaned_marker(&entries);
 
     Ok(BookDetails {
         title,
         metadata_title,
         creator,
+        cleaned,
         entries,
         file: file_facts(path),
     })
+}
+
+/// The timestamp stored by the marker [`write_metadata`] writes, `None` for a
+/// file this app never rewrote.
+fn cleaned_marker(entries: &[(String, String)]) -> Option<String> {
+    entries
+        .iter()
+        .find(|(label, _)| label == CLEANED_LABEL)
+        .map(|(_, value)| value.clone())
+}
+
+/// Whether the EPUB at `path` was already cleaned by this app.
+///
+/// The list asks this about every file it shows, right after a scan, so it is
+/// kept cheap: only the package document is read, and a file that cannot be
+/// opened simply counts as not cleaned.
+pub fn is_cleaned(path: &Path) -> bool {
+    let Ok(file) = std::fs::File::open(path) else {
+        return false;
+    };
+    let Ok(mut archive) = ZipArchive::new(file) else {
+        return false;
+    };
+    let Some(package) = package_document(&mut archive).ok() else {
+        return false;
+    };
+    let Some(xml) = read_entry(&mut archive, &package) else {
+        return false;
+    };
+    parse_metadata(&xml).is_ok_and(|entries| cleaned_marker(&entries).is_some())
 }
 
 /// Reads one archive entry as text. EPUB XML parts are UTF-8, but a lossy
@@ -474,6 +519,13 @@ fn rewrite_metadata(xml: &str, metadata: &EpubMetadata) -> Result<String, String
         ));
     }
     elements.extend(cover);
+    // Our own marker, last so it is easy to spot: the legacy `name`/`content`
+    // spelling works in both package versions and is what the cover pointer
+    // above already uses. Its local part is displayed as "Cleaned".
+    elements.push(format!(
+        "<meta xmlns=\"{OPF_NAMESPACE}\" name=\"{CLEANED_META}\" content=\"{}\"/>",
+        now_timestamp()
+    ));
 
     // Build the replacement around the block's own opening tag, so its
     // namespace declarations (and any attribute on it) stay in force.
@@ -813,6 +865,10 @@ mod tests {
                 "{name}: the identifier was dropped"
             );
             assert!(block.contains("language"), "{name}: the language was dropped");
+            assert!(
+                block.contains("elibrary:cleaned"),
+                "{name}: no cleaned marker"
+            );
 
             // ... and nothing the file used to claim.
             for leftover in [
@@ -880,10 +936,16 @@ mod tests {
                             // EPUB 2 files get the Calibre series spelling.
                             | "Series"
                             | "Series index"
+                            // The marker this app writes to say it cleaned
+                            // the file.
+                            | "Cleaned"
                     ),
                     "{name}: unexpected metadata row {label}"
                 );
             }
+
+            // The marker the list's green check reads.
+            assert!(is_cleaned(&copy), "{name}: the copy is not marked as cleaned");
 
             let _ = std::fs::remove_file(&copy);
         }
