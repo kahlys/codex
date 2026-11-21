@@ -233,12 +233,16 @@ fn parse_metadata(package_xml: &str) -> Result<Vec<(String, String)>, String> {
     };
 
     let mut entries: Vec<(String, String)> = Vec::new();
+    // EPUB 3 stores a saga's volume number as a refinement of the saga entry,
+    // so it has to be looked up by id: the file may write it before or after
+    // the entry it qualifies.
+    let volume_numbers = group_positions(metadata);
 
     for node in metadata.children().filter(|node| node.is_element()) {
         let name = node.tag_name().name();
 
         if name.eq_ignore_ascii_case("meta") {
-            push_meta_entry(node, &mut entries);
+            push_meta_entry(node, &volume_numbers, &mut entries);
         } else if name.eq_ignore_ascii_case("link") || name.eq_ignore_ascii_case("dc-metadata") {
             // `<link>` points at external records, `<dc-metadata>` is a wrapper
             // some broken tools add; neither carries a displayable value.
@@ -256,8 +260,13 @@ fn parse_metadata(package_xml: &str) -> Result<Vec<(String, String)>, String> {
 /// * EPUB 3: `<meta property="dcterms:modified">2024-01-01T00:00:00Z</meta>`
 ///
 /// `<meta refines="...">` entries only qualify another field (sort keys, title
-/// types, ...), so they are skipped rather than shown as standalone rows.
-fn push_meta_entry(node: roxmltree::Node, entries: &mut Vec<(String, String)>) {
+/// types, ...), so they are skipped rather than shown as standalone rows. The
+/// exception is the volume number of a saga: it belongs next to the saga itself.
+fn push_meta_entry(
+    node: roxmltree::Node,
+    volume_numbers: &[(String, String)],
+    entries: &mut Vec<(String, String)>,
+) {
     let attribute = |name: &str| {
         node.attribute(name)
             .map(str::trim)
@@ -275,7 +284,42 @@ fn push_meta_entry(node: roxmltree::Node, entries: &mut Vec<(String, String)>) {
 
     if let Some(property) = attribute("property") {
         push_entry(label_for(property), element_text(node), entries);
+
+        // A saga is only half the answer: when the file also says which volume
+        // of it this book is, that number is shown as a row of its own, right
+        // under the saga it belongs to.
+        if property == "belongs-to-collection"
+            && let Some(id) = attribute("id")
+            && let Some((_, volume)) = volume_numbers.iter().find(|(target, _)| target == id)
+        {
+            push_entry("Tome".to_string(), volume.clone(), entries);
+        }
     }
+}
+
+/// The volume numbers the file records for its collections, as (collection id,
+/// number) pairs.
+///
+/// EPUB 3 gives each `belongs-to-collection` entry an id and refines it with a
+/// `group-position` entry holding the number of the book inside that
+/// collection. Both are needed to show the number, which is why they are
+/// collected before the entries are built.
+fn group_positions(metadata: roxmltree::Node) -> Vec<(String, String)> {
+    metadata
+        .children()
+        .filter(is_meta)
+        .filter_map(|node| {
+            if node.attribute("property") != Some("group-position") {
+                return None;
+            }
+            let target = node
+                .attribute("refines")?
+                .trim_start_matches('#')
+                .to_string();
+            let number = collapse_whitespace(&element_text(node));
+            (!number.is_empty()).then_some((target, number))
+        })
+        .collect()
 }
 
 /// Adds a row unless the value is blank or an identical row already exists
@@ -931,6 +975,9 @@ mod tests {
                             | "Language"
                             | "Date"
                             | "Belongs to collection"
+                            // The volume number of the saga, which EPUB 3 stores
+                            // as a refinement of the collection.
+                            | "Tome"
                             | "Last modified"
                             | "Cover"
                             // EPUB 2 files get the Calibre series spelling.
@@ -944,6 +991,16 @@ mod tests {
                 );
             }
 
+            // The saga's volume number is read back too, whatever the package
+            // version stores it as: EPUB 3 refines the collection with a
+            // `group-position`, EPUB 2 uses Calibre's series index.
+            assert!(
+                details.entries.iter().any(|(label, value)| {
+                    matches!(label.as_str(), "Tome" | "Series index") && value == "2"
+                }),
+                "{name}: the volume number of the saga was dropped"
+            );
+
             // The marker the list's green check reads.
             assert!(is_cleaned(&copy), "{name}: the copy is not marked as cleaned");
 
@@ -951,5 +1008,44 @@ mod tests {
         }
 
         let _ = std::fs::remove_dir_all(&work);
+    }
+
+    /// EPUB 3 keeps a saga's volume number in a refinement of the saga entry,
+    /// not in the entry itself: the details page has to show it anyway.
+    #[test]
+    fn a_saga_volume_number_is_read_next_to_the_saga() {
+        let xml = r##"<?xml version="1.0"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>Un tome</dc:title>
+    <!-- The refinement comes first here, so the order in the file cannot
+         matter to the lookup. -->
+    <meta refines="#saga" property="collection-type">series</meta>
+    <meta refines="#saga" property="group-position">3</meta>
+    <meta property="belongs-to-collection" id="saga">Saga de test</meta>
+  </metadata>
+</package>"##;
+
+        let entries = parse_metadata(xml).expect("the package document does not parse");
+        assert!(entries.contains(&("Belongs to collection".to_string(), "Saga de test".to_string())));
+        assert!(entries.contains(&("Tome".to_string(), "3".to_string())));
+        // The refinement is shown through the saga, not as a row of its own,
+        // and a collection type is not a value of the book.
+        assert!(!entries.iter().any(|(label, _)| label == "Group position"));
+        assert!(!entries.iter().any(|(label, _)| label == "Collection type"));
+    }
+
+    /// A book that belongs to no collection has no volume number either.
+    #[test]
+    fn a_book_without_a_saga_has_no_volume_number() {
+        let xml = r##"<?xml version="1.0"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>Un livre seul</dc:title>
+  </metadata>
+</package>"##;
+
+        let entries = parse_metadata(xml).expect("the package document does not parse");
+        assert!(!entries.iter().any(|(label, _)| label == "Tome"));
     }
 }
