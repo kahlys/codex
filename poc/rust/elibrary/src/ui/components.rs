@@ -1,55 +1,8 @@
 //! Small, reusable pieces of UI shared by both columns.
 
-use gpui::{
-    AnyElement, ClickEvent, Context, IntoElement, ParentElement, StatefulInteractiveElement,
-    Styled, Window, div, prelude::*, px, rgb,
-};
+use gpui::{AnyElement, IntoElement, ParentElement, Styled, div, px, rgb};
 
-use crate::app::EpubBrowser;
 use crate::ui::theme;
-
-/// The signature GPUI wants from a listener once it has been adapted by
-/// `Context::listener`: exclusive access to the view state (`&mut self` is the
-/// very reason `listener` exists — plain `on_click` callbacks cannot reach it),
-/// the event, the window, and the view context.
-pub type Handler = fn(&mut EpubBrowser, &ClickEvent, &mut Window, &mut Context<EpubBrowser>);
-
-/// One `-` / `+` button for the counter in the footer.
-///
-/// `handler` is a plain function pointer with the shape of [`Handler`];
-/// `cx.listener(handler)` adapts it into the closure `on_click` wants,
-/// re-attaching `&mut self` for us. Passing a function instead of writing a
-/// closure inline keeps the call sites in `list.rs` short.
-///
-/// The return type `impl IntoElement` means "some element type"; the caller
-/// only uses `.child(...)` on it, which is all `IntoElement` requires.
-pub fn stepper_button(
-    label: &'static str,
-    id: &'static str,
-    handler: Handler,
-    cx: &mut Context<EpubBrowser>,
-) -> impl IntoElement {
-    div()
-        // Interactive elements that keep per-element state need an id. Using
-        // one here also disambiguates the two buttons in GPUI's element cache,
-        // so the click handler is attached to the right node.
-        .id(id)
-        // `px_*` / `py_*` are padding; numbers map to a spacing scale.
-        .px_3()
-        .py_1()
-        // `rounded_md` rounds the corners; `bg` takes a colour from `rgb`.
-        .rounded_md()
-        .bg(rgb(theme::CONTROL))
-        // Show the hand cursor so it is obvious the div is clickable:
-        // GPUI divs are inert unless told otherwise.
-        .cursor_pointer()
-        .hover(|style| style.bg(rgb(theme::CONTROL_HOVER)))
-        // A single string child; anything that is `IntoElement` works here,
-        // including `format!()`ed strings.
-        .child(div().text_size(px(16.0)).child(label))
-        // Fire on a full click (press + release on the element).
-        .on_click(cx.listener(handler))
-}
 
 /// One labelled card of `label: value` rows on the details page.
 pub fn detail_section(heading: &str, rows: &[(String, String)]) -> AnyElement {

@@ -2,7 +2,7 @@
 name = "elibrary"
 version = "0.1.0"
 edition = "2024"
-description = "A minimal, heavily commented GPUI counter app"
+description = "A minimal, heavily commented GPUI EPUB browser"
 
 [dependencies]
 # GPUI is the UI framework that powers the Zed editor: a GPU-accelerated,

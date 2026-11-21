@@ -5,7 +5,7 @@
 //! * hold [`EpubBrowser`] — every field the window needs to draw a frame, plus
 //!   which book's row is expanded;
 //! * react to the user — pick a folder, expand a book, look it up in the BnF
-//!   catalogue, collapse it again, step the counter.
+//!   catalogue, collapse it again, clean the files.
 //!
 //! Notice what is *not* here: no element building (that is [`crate::ui`]) and no
 //! file-system or ZIP code (that is [`crate::library`]). The handlers orchestrate
@@ -117,8 +117,6 @@ pub enum CleanMark {
 /// them directly; that is cheaper to read than seven one-line getters, and this
 /// crate is a single binary, so "crate" is already the smallest useful scope.
 pub struct EpubBrowser {
-    /// The number being displayed. `i32` (signed) so it can go negative.
-    pub(crate) count: i32,
     /// The folder the user picked, if any. Shown in the search bar.
     pub(crate) folder: Option<PathBuf>,
     /// Every `.epub` file under `folder` (including subfolders), sorted.
@@ -151,7 +149,6 @@ impl EpubBrowser {
     /// Nothing GPUI-specific happens here: it just builds the initial state.
     pub fn new() -> Self {
         Self {
-            count: 0,
             folder: None,
             epubs: Vec::new(),
             cleaned: HashSet::new(),
@@ -707,30 +704,6 @@ impl EpubBrowser {
             .ok();
         })
         .detach();
-    }
-
-    /// Event handler for the "+" button.
-    pub(crate) fn increment(
-        &mut self,
-        _event: &ClickEvent,
-        _window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        self.count += 1;
-
-        // Changes the footer number, so the window needs a new frame.
-        cx.notify();
-    }
-
-    /// Event handler for the "-" button. Identical to `increment`, minus one.
-    pub(crate) fn decrement(
-        &mut self,
-        _event: &ClickEvent,
-        _window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        self.count -= 1;
-        cx.notify();
     }
 }
 

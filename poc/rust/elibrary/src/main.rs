@@ -2,7 +2,7 @@
 //! dialog, then lists every `.epub` file found in that folder and its
 //! subfolders. Clicking a book expands its row in place to show the metadata
 //! stored inside the EPUB itself; clicking it again folds it back, so the list
-//! stays visible the whole time. The original counter lives in the footer.
+//! stays visible the whole time.
 //!
 //! Run it with:
 //!
@@ -108,8 +108,8 @@ fn main() {
         // A window needs a rectangle before it is created.
         // `Bounds::centered(None, ...)` centres it on the primary display
         // (passing `Some(display_id)` would centre it on a given monitor).
-        // Wider than the counter demo: the metadata rows of an expanded book
-        // read better with room for their values.
+        // Roomy enough that the metadata rows of an expanded book have space
+        // for their values.
         let bounds = Bounds::centered(None, size(px(1120.0), px(720.0)), cx);
 
         cx.open_window(

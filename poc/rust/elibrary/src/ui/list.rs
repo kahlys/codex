@@ -1,4 +1,4 @@
-//! The single screen: search bar, the books, and the footer counter.
+//! The single screen: search bar, the books, and the footer.
 //!
 //! There is no second column: the list owns the whole width, and clicking a row
 //! expands that row in place (see [`crate::ui::details`]), so a book's metadata
@@ -15,7 +15,6 @@ use gpui::{
 };
 
 use crate::app::{CleanMark, DetailsState, EpubBrowser};
-use crate::ui::components::stepper_button;
 use crate::ui::{details, theme};
 
 /// Builds the whole window: search bar, the list, and the footer.
@@ -35,8 +34,8 @@ pub fn render(app: &EpubBrowser, cx: &mut Context<EpubBrowser>) -> AnyElement {
         .child(status_line(app))
         // ---- The books, using the whole width ----------------------
         .child(results(app, cx))
-        // ---- The original counter, kept in the footer -------------
-        .child(footer(app, cx))
+        // ---- Footer -----------------------------------------------
+        .child(footer())
         .into_any_element()
 }
 
@@ -390,47 +389,17 @@ fn row(
     card.into_any_element()
 }
 
-/// Brand on the left, the original counter on the right.
-fn footer(app: &EpubBrowser, cx: &mut Context<EpubBrowser>) -> impl IntoElement {
+/// The footer: just the brand.
+fn footer() -> impl IntoElement {
     div()
         .w_full()
         .flex()
         .flex_row()
         .items_center()
-        .justify_between()
         .child(
             div()
                 .text_size(px(12.0))
                 .text_color(rgb(theme::TEXT_DIM))
                 .child("GPUI EPUB browser"),
-        )
-        .child(
-            div()
-                .flex()
-                .flex_row()
-                .items_center()
-                .gap_3()
-                .child(stepper_button(
-                    "-",
-                    "decrement-button",
-                    EpubBrowser::decrement,
-                    cx,
-                ))
-                // A fixed minimum width so the buttons do not shift when the
-                // number goes from 9 to 10 or negative.
-                .child(
-                    div()
-                        .min_w(px(30.0))
-                        .flex()
-                        .justify_center()
-                        .text_size(px(16.0))
-                        .child(app.count.to_string()),
-                )
-                .child(stepper_button(
-                    "+",
-                    "increment-button",
-                    EpubBrowser::increment,
-                    cx,
-                )),
         )
 }
