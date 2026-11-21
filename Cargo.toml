@@ -9,4 +9,5 @@ members = [
     "poc/rust/mini/ex",
     "poc/rust/mini/grep",
     "poc/rust/mini/tcphello",
+    "poc/rust/elibrary",
 ]
