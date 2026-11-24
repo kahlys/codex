@@ -22,19 +22,15 @@ pub fn create_token(username: &str) -> Result<String, jsonwebtoken::errors::Erro
         exp: expiration,
     };
 
-    encode(
-        &Header::default(),
-        &claims,
-        &EncodingKey::from_secret(JWT_SECRET.as_ref()),
-    )
+    let key = EncodingKey::from_secret(JWT_SECRET.as_ref())?;
+
+    encode(&Header::default(), &claims, &key)
 }
 
 pub fn validate_token(token: &str) -> Result<TokenData<Claims>, jsonwebtoken::errors::Error> {
-    decode::<Claims>(
-        token,
-        &DecodingKey::from_secret(JWT_SECRET.as_ref()),
-        &Validation::default(),
-    )
+    let key = DecodingKey::from_secret(JWT_SECRET.as_ref())?;
+
+    decode::<Claims>(token, &key, &Validation::default())
 }
 
 pub async fn login(
